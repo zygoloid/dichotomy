@@ -74,7 +74,16 @@ function drawRoomFrame(c) {
   };
   side(BX0, BY0, BX1, BY0, 'n'); side(BX1, BY0, BX1, BY1, 'e'); side(BX0, BY1, BX1, BY1, 's'); side(BX0, BY0, BX0, BY1, 'w');
   c.stroke();
-  const TC = { boss: BAD, treasure: SHARD, shop: GOOD, challenge: '#b98cff', altar: HEART };
+  const TC = { boss: BAD, treasure: SHARD, shop: GOOD, challenge: '#b98cff', altar: HEART, mini: '#ff8a3d', secret: '#ffffff' };
+  if (room.hidden) {
+    // hairline cracks where a secret door can be shot open
+    const [x, y] = DOOR_POS[room.hidden.dir], v = DIRV[room.hidden.dir], hot = G.t - room.hidden.flT < .15;
+    c.save(); c.translate(x, y); c.rotate(Math.atan2(v[1], v[0]));
+    c.strokeStyle = hot ? '#fff' : rgba('#ffffff', .5); c.lineWidth = hot ? 2.5 : 1.2;
+    c.beginPath(); c.moveTo(-1, -26); c.lineTo(-7, -14); c.lineTo(-2, -6); c.lineTo(-10, 4); c.lineTo(-3, 12); c.lineTo(-8, 24);
+    c.moveTo(-7, -14); c.lineTo(-14, -18); c.moveTo(-10, 4); c.lineTo(-16, 8); c.stroke();
+    c.restore();
+  }
   for (const d in D) {
     const [x, y] = DOOR_POS[d], v = DIRV[d], t = D[d], col = TC[t.type] || '#ffffff';
     c.save(); c.translate(x, y); c.rotate(Math.atan2(v[1], v[0]));
@@ -251,6 +260,18 @@ function drawPlayer(c) {
     c.beginPath(); c.arc(P.x, P.y, s.absorbR + 5, -Math.PI / 2, -Math.PI / 2 + TAU * P.charge / s.chargeMax); c.stroke();
   }
   if (P.lockT > 0) { c.strokeStyle = BAD; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 19, 0, TAU * P.lockT / s.flipLock); c.stroke(); }
+  if (s.ghost && P.hist.length) {
+    c.globalAlpha = .4; c.setLineDash([4, 4]);
+    shipPath(c, R.ship.id, P.hist[0].x, P.hist[0].y, 12, P.face); c.strokeStyle = col; c.lineWidth = 2; c.stroke();
+    c.setLineDash([]); c.globalAlpha = 1;
+  }
+  if (s.flail) {
+    const F = P.fl;
+    c.strokeStyle = rgba(col, .5); c.lineWidth = 1.5; c.beginPath(); c.moveTo(P.x, P.y); c.lineTo(F.x, F.y); c.stroke();
+    c.beginPath();
+    for (let i = 0; i < 12; i++) { const a = G.t * 6 + i * TAU / 12, r = i % 2 ? 8 : 14; c.lineTo(F.x + Math.cos(a) * r, F.y + Math.sin(a) * r); }
+    c.closePath(); polFill(c, P.pol, false, 1.5);
+  }
   for (let i = 0; i < s.orbit; i++) {
     const a = R.time * 2.6 + i * TAU / s.orbit;
     shipPath(c, R.ship.id, P.x + Math.cos(a) * 48, P.y + Math.sin(a) * 48, 6, a + Math.PI / 2); polFill(c, P.pol, false, 1.5);
@@ -314,6 +335,13 @@ function drawWorld(c) {
       c.fillStyle = SHARD; polyPath(c, p.x, p.y, 6, 4, G.t * 4 + p.x); c.fill();
     } else icon(c, UP.vamp.icon, p.x, p.y + Math.sin(G.t * 4) * 3, 24, HEART, 1.4);
   }
+  for (const o of R.orbs) {
+    const k = o.t / 2.6;
+    c.fillStyle = '#000'; c.beginPath(); c.arc(o.x, o.y, 12 + k * 6, 0, TAU); c.fill();
+    c.strokeStyle = PAL.pc[P.pol]; c.lineWidth = 2;
+    for (let i = 0; i < 3; i++) { c.globalAlpha = .7 - i * .2; c.beginPath(); c.ellipse(o.x, o.y, 22 + i * 12, 9 + i * 5, G.t * 3 * (i % 2 ? -1 : 1) + i, 0, TAU); c.stroke(); }
+    c.globalAlpha = 1;
+  }
   for (const m of R.mines) { polyPath(c, m.x, m.y, 7, 4, 0); polFill(c, R.P.pol, m.t > .4 && Math.sin(m.t * 14) > .6, 1.5); }
   for (const e of R.enemies) drawEnemy(c, e);
   drawBeams(c);
@@ -322,6 +350,12 @@ function drawWorld(c) {
   drawBullets(c);
   c.globalCompositeOperation = 'lighter';
   for (const b of R.booms) { const k = b.t / .25; c.strokeStyle = rgba('#ffb060', 1 - k); c.lineWidth = 6 * (1 - k) + 1; c.beginPath(); c.arc(b.x, b.y, b.r * (.4 + .6 * k), 0, TAU); c.stroke(); }
+  for (const sl of R.slashes) {
+    const k = 1 - sl.t / .16;
+    c.strokeStyle = rgba(PAL.pc[sl.pol], k); c.lineWidth = 14 * k + 2;
+    c.beginPath(); c.arc(sl.x, sl.y, 62 + (1 - k) * 22, sl.ang - 1.15, sl.ang + 1.15); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,' + k * .8 + ')'; c.lineWidth = 3 * k; c.stroke();
+  }
   for (const tr of R.trails) {
     const k = 1 - tr.t / .14, p = tr.pts;
     c.beginPath(); c.moveTo(p[0], p[1]);
@@ -359,10 +393,10 @@ function drawUpRow(c, ups, x0, y, s, maxW) {
 }
 
 function drawMinimap(c) {
-  const cx = W - 130, cy = 34, cur = R.room, TC = { boss: BAD, treasure: SHARD, shop: GOOD, challenge: '#b98cff', altar: HEART };
+  const cx = W - 130, cy = 34, cur = R.room, TC = { boss: BAD, treasure: SHARD, shop: GOOD, challenge: '#b98cff', altar: HEART, mini: '#ff8a3d', secret: '#ffffff' };
   // keep the map on the wall strip: scale so the floor's extent fits
   let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
-  const vis = R.floor.rooms.filter(r => r.seen || (META.un.mapreveal && TC[r.type]));
+  const vis = R.floor.rooms.filter(r => r.seen || (R.P.stats.map && TC[r.type] && r.type !== 'secret'));
   for (const r of vis) { x0 = Math.min(x0, r.gx); x1 = Math.max(x1, r.gx); y0 = Math.min(y0, r.gy); y1 = Math.max(y1, r.gy); }
   const cw = 15, ch = 9, ox = cx - (x0 + x1) / 2 * (cw + 3), oy = cy - (y0 + y1) / 2 * (ch + 3);
   c.save();
@@ -411,7 +445,7 @@ function drawHUD(c) {
   // boss bar
   const bosses = R.enemies.filter(e => e.boss);
   if (bosses.length) {
-    const tot = bosses.reduce((a, e) => a + e.maxHp, 0) * (PAL.boss.length / bosses.length), hp = bosses.reduce((a, e) => a + Math.max(0, e.hp), 0);
+    const tot = R.bossMax, hp = Math.min(tot, bosses.reduce((a, e) => a + Math.max(0, e.hp) + (e.extra || 0), 0));
     const w = 520, x = W / 2 - w / 2, y = 20;
     c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.strokeRect(x - 3.5, y - 3.5, w + 7, 15);
     c.fillStyle = PAL.pc[bosses[0].pol]; c.fillRect(x, y, w * hp / tot, 8);
@@ -474,7 +508,7 @@ function drawTitle(c) {
   keycap(c, 420, 620, 'A'); keycap(c, 450, 620, 'D'); shipPath(c, 'tri', 490, 620, 9, 0); c.strokeStyle = '#fff'; c.stroke();
   if (ma > 0) { keycap(c, 560, 620, 'W'); keycap(c, 590, 620, 'S'); c.fillStyle = BAD; polyPath(c, 622, 620, 8, 3, -Math.PI / 2); c.fill(); }
   if (Math.sin(G.t * 5) > -.3) { keycap(c, 720, 620, 'SPACE', 70); icon(c, MSTAT_ICON.runs, 776, 620, 22, '#fff', 1); }
-  keycap(c, 850, 620, 'TAB', 44); icon(c, UN.mapreveal.icon, 892, 620, 20, '#fff', 1);
+  keycap(c, 850, 620, 'TAB', 44); icon(c, 'P1,1,9,1,9,9,1,9;L1,5,9,5;L5,1,5,9', 892, 620, 20, '#fff', 1);
   c.globalAlpha = 1;
 }
 
@@ -579,6 +613,7 @@ function render(c) {
     if (G.state === 'pause') drawPause(c);
     else if (G.state === 'dead' || G.state === 'win') drawEnd(c, G.state === 'win');
     for (const w of R.wells) src.push([1, w.x, w.y, w.vis || w.r * .22, .00016 * w.str]);
+    for (const o of R.orbs) src.push([1, o.x, o.y, 55, .03]);
     if (R.room.portal) src.push([1, R.room.portal.x, R.room.portal.y, 46, .02]);
     for (const f of R.fx) src.push([2, f.x, f.y, f.t * f.spd, f.str * (1 - f.t / f.life)]);
     if (R.P.stats.grav) for (let i = 0; i < R.shots.length && src.length < 12; i += 4) src.push([1, R.shots[i].x, R.shots[i].y, 18, .0015 * Math.min(3, R.P.stats.grav)]);

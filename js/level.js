@@ -29,7 +29,7 @@ function rollUps(n, luck, filter) {
 }
 
 function genWaves(stage, depth) {
-  const pool = Object.keys(ENEMY).filter(k => { const d = ENEMY[k]; return !d.boss && d.min <= stage && isUnlocked(d.unlock); });
+  const pool = Object.keys(ENEMY).filter(k => { const d = ENEMY[k]; return !d.boss && !d.mb && d.min <= stage && isUnlocked(d.unlock); });
   const budget = 4 + stage * 1.8 + depth * .4 + R.asc;
   const nW = 1 + (chance(.55) ? 1 : 0) + (stage >= 2 && chance(.35) ? 1 : 0), waves = [];
   for (let i = 0; i < nW; i++) {
@@ -86,19 +86,27 @@ function genWells(n) {
 function genFloor(stage) {
   const rooms = [], map = {}, key = (x, y) => x + ',' + y, dirs = Object.values(DIRV);
   const add = (x, y, type) => {
-    const r = { gx: x, gy: y, type, doors: {}, cleared: false, visited: false, seen: false, obs: [], gates: [], wells: [], waves: [], peds: [], pickups: [], portal: null, depth: 0 };
+    const r = { gx: x, gy: y, type, doors: {}, cleared: false, visited: false, seen: false, obs: [], gates: [], wells: [], hidden: null, mb: null, waves: [], peds: [], pickups: [], portal: null, depth: 0 };
     rooms.push(r); map[key(x, y)] = r; return r;
   };
   const nb = (x, y) => dirs.filter(d => map[key(x + d[0], y + d[1])]).length;
   add(0, 0, 'start');
-  const n = 6 + stage * 2 + randi(0, 1);
+  const n = 7 + stage * 2 + randi(0, 1);
   for (let g = 0; rooms.length < n && g < 3000; g++) {
     const r = pick(rooms), d = pick(dirs), x = r.gx + d[0], y = r.gy + d[1];
     if (map[key(x, y)] || Math.abs(x) > 4 || Math.abs(y) > 3) continue;
     if (nb(x, y) > 1 && chance(.8)) continue;
     add(x, y, 'fight');
   }
-  const link = () => { for (const r of rooms) for (const d in DIRV) { const o = map[key(r.gx + DIRV[d][0], r.gy + DIRV[d][1])]; if (o) r.doors[d] = o; } };
+  // a secret room has no door: its neighbour gets a cracked wall that must be shot open
+  const link = () => {
+    for (const r of rooms) for (const d in DIRV) {
+      const o = map[key(r.gx + DIRV[d][0], r.gy + DIRV[d][1])];
+      if (!o || r.type === 'secret') continue;
+      if (o.type === 'secret') r.hidden = { dir: d, room: o, hp: 70 + 45 * stage, flT: -9 };
+      else r.doors[d] = o;
+    }
+  };
   const bfs = () => {
     for (const r of rooms) r.depth = -1;
     rooms[0].depth = 0; const q = [rooms[0]];
@@ -106,11 +114,13 @@ function genFloor(stage) {
   };
   link(); bfs();
   // special rooms are always dead ends hanging off a normal room
-  const specials = ['boss', 'treasure'];
+  // order matters on small floors: dead-end slots can run out, so the essentials go first
+  const specials = ['boss', 'treasure', 'secret'];
   if (isUnlocked('treasure2') && META.un.treasure2 && chance(.6)) specials.push('treasure');
   if (META.un.shop) specials.push('shop');
   if (META.un.challenge && chance(.6)) specials.push('challenge');
   if (META.un.altar && chance(.5)) specials.push('altar');
+  if (chance(.75)) specials.splice(3, 0, 'mini');
   for (const type of specials) {
     const c = [];
     for (const r of rooms) {
@@ -136,12 +146,18 @@ function genFloor(stage) {
       ups.forEach((u, i) => r.peds.push({ x: W / 2 + (i - (ups.length - 1) / 2) * 190, y: H / 2, up: u, price: 0, group: 1, taken: false }));
     } else if (r.type === 'shop') {
       const ups = rollUps(2, luck + 2);
-      r.peds.push({ x: W / 2 - 190, y: H / 2, up: ups[0], price: 12 + stage * 4, taken: false });
-      r.peds.push({ x: W / 2, y: H / 2, heart: true, price: 6 + stage * 2, taken: false });
-      if (ups[1]) r.peds.push({ x: W / 2 + 190, y: H / 2, up: ups[1], price: 17 + stage * 4, taken: false });
+      r.peds.push({ x: W / 2 - 190, y: H / 2, up: ups[0], price: 15 + stage * 5, taken: false });
+      r.peds.push({ x: W / 2, y: H / 2, heart: true, price: 8 + stage * 2, taken: false });
+      if (ups[1]) r.peds.push({ x: W / 2 + 190, y: H / 2, up: ups[1], price: 22 + stage * 5, taken: false });
     } else if (r.type === 'challenge') {
       r.peds.push({ x: W / 2, y: H / 2, up: rollUps(1, 4, u => u.tier > 0)[0], price: 0, taken: false });
       r.waves = genWaves(stage + 1, 4).concat(genWaves(stage + 1, 6)).slice(0, 3);
+    } else if (r.type === 'mini') {
+      r.mb = pick(['hydra', 'lancer', 'carousel']);
+    } else if (r.type === 'secret') {
+      r.peds.push({ x: W / 2, y: H / 2 - 20, up: rollUps(1, 6)[0], price: 0, taken: false });
+      r.pickups.push({ x: W / 2 - 150, y: H / 2, kind: 'heart', t: 0 });
+      for (let i = 0; i < 5; i++) r.pickups.push({ x: W / 2 + 130 + rand(40), y: H / 2 - 20 + rand(40), kind: 'shard', t: 0 });
     } else if (r.type === 'altar') {
       rollUps(2, 6, u => u.tier >= 1).forEach((u, i) => r.peds.push({ x: W / 2 + (i ? 110 : -110), y: H / 2, up: u, price: 0, hpCost: 1, taken: false }));
     } else if (r.type === 'start' && META.un.startped && stage === 0) {

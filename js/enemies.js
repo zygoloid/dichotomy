@@ -172,6 +172,59 @@ E('mirror', {
   }
 });
 
+// ---------------------------------------------------------------- mini-bosses
+// splits twice; extra = health of the heads it has yet to grow, for the health bar
+E('hydra', {
+  hp: 300, r: 40, sides: 6, mb: true,
+  init(e) { e.cd = 1; e.gen = 0; e.extra = e.maxHp * 1.44; },
+  ai(e, dt) {
+    moveTo(e, R.P.x, R.P.y, 50 + e.gen * 35, dt); e.rot += dt * (.6 + e.gen * .5);
+    if ((e.cd -= dt) <= 0) { e.cd = 1.3 - e.gen * .2; efan(e, 5 - e.gen, .9, aimP(e), 170 + e.gen * 20); }
+  },
+  death(e) {
+    if (e.gen >= 2) return;
+    for (let k = 0; k < 2; k++) {
+      const m = makeEnemy('hydra', e.x + (k ? 20 : -20), e.y, k, .3);
+      m.gen = e.gen + 1; m.r = e.r * .7; m.hp = m.maxHp = e.maxHp * .4; m.extra = m.gen < 2 ? m.maxHp * .8 : 0;
+    }
+  }
+});
+// wall-to-wall dashes that leave a curtain of bullets, swapping colour at every impact
+E('lancer', {
+  hp: 520, r: 28, sides: 3, mb: true, arrow: true,
+  init(e) { e.st = 0; e.cd = 1.2; e.q = 0; },
+  ai(e, dt) {
+    e.cd -= dt;
+    if (e.st === 0) {
+      e.vx *= .85; e.vy *= .85;
+      if (e.cd > .25) e.rot = turnTo(e.rot, aimP(e), 6 * dt);
+      e.warn = e.rot;
+      if (e.cd <= 0) { e.st = 1; e.warn = null; e.cd = 1.2; }
+    } else {
+      e.vx = Math.cos(e.rot) * 720; e.vy = Math.sin(e.rot) * 720;
+      if ((e.q -= dt) <= 0) { e.q = .045; eb(e.x, e.y, e.rot + Math.PI / 2, 35, e.pol); eb(e.x, e.y, e.rot - Math.PI / 2, 35, e.pol); }
+      const wall = e.x <= BX0 + e.r + 2 || e.x >= BX1 - e.r - 2 || e.y <= BY0 + e.r + 2 || e.y >= BY1 - e.r - 2;
+      if (e.cd <= 0 || wall) { e.st = 0; e.cd = e.hp < e.maxHp * .5 ? .6 : .95; e.vx = e.vy = 0; ering(e, 16, 170, rand(TAU)); e.pol ^= 1; fxShake(6); }
+    }
+  }
+});
+// three rotating beams of alternating colour around a fixed hub
+E('carousel', {
+  hp: 600, r: 32, sides: 8, mb: true, cross: true,
+  init(e) { e.beams = [0, 1, 2].map(k => ({ ang: k * TAU / 3, pol: k & 1, state: 'off' })); e.st = 0; e.cd = 1; e.c2 = 1.5; e.dir = 1; e.q = 0; },
+  ai(e, dt) {
+    moveTo(e, W / 2, H / 2, 60, dt, 2);
+    if ((e.cd -= dt) <= 0) {
+      e.st = (e.st + 1) % 3; e.cd = [1.2, 1.2, 5][e.st];
+      if (e.st === 1) { e.dir = -e.dir; for (const b of e.beams) b.pol ^= 1; }
+      if (e.st === 2) AU.sfx('beam');
+    }
+    for (const b of e.beams) { b.state = ['off', 'warn', 'on'][e.st]; b.ang += e.dir * .55 * dt * (e.st === 2 ? 1 : .2); }
+    e.rot = e.beams[0].ang;
+    if ((e.c2 -= dt) <= 0) { e.c2 = 1.5; e.q ^= 1; ering(e, 12, 140, e.rot, e.q); }
+  }
+});
+
 // ---------------------------------------------------------------- bosses
 E('mono', {
   hp: 1300, r: 52, sides: 4, boss: true,
@@ -280,10 +333,10 @@ E('eclipse', {
 // ---------------------------------------------------------------- lifecycle
 function makeEnemy(type, x, y, pol, spawnT) {
   const def = ENEMY[type];
-  const hp = def.hp * (def.boss ? 1 + .25 * R.asc : R.hpMul);
+  const hp = def.hp * (def.boss ? 1 + .25 * R.asc : R.hpMul * (def.mb ? 1 + .15 * R.asc : 1));
   const e = {
     type, def, x, y, vx: 0, vy: 0, r: def.r, hp, maxHp: hp, pol, t: 0, cd: 1, rot: rand(TAU), id: R.eid++,
-    spawn: spawnT === undefined ? .9 : spawnT, fl: 0, burn: 0, burnDps: 0, slowT: 0, slowF: 1, boss: !!def.boss, dead: false, warn: null
+    spawn: spawnT === undefined ? .9 : spawnT, fl: 0, burn: 0, burnDps: 0, slowT: 0, slowF: 1, boss: !!(def.boss || def.mb), dead: false, warn: null
   };
   if (def.init) def.init(e);
   R.enemies.push(e);
@@ -305,26 +358,28 @@ function killEnemy(e) {
   // Ikaruga chain: three same-polarity kills in a row extend the chain
   if (P.seqN > 0 && e.pol !== P.seqPol) { P.chain = 0; P.seqN = 0; }
   P.seqPol = e.pol; P.seqN++;
-  if (P.seqN === 3) { P.seqN = 0; P.chain++; mMax('chain', P.chain); dropShards(e.x, e.y, 1); AU.sfx('pick'); }
+  if (P.seqN === 3) { P.seqN = 0; P.chain++; mMax('chain', P.chain); AU.sfx('pick'); }
+  if (P.stats.swarm) for (let i = 0; i < 3 * P.stats.swarm; i++)
+    spawnShot(e.x, e.y, rand(TAU), { dmg: shotDmg() * .5, pol: P.pol, hom: 6, spd: 420, life: 1.4, size: .8, split: 0, frag: 0, proj: true, kid: true });
   const col = PAL.pc[e.pol];
   fxParts(e.x, e.y, col, e.boss ? 80 : 14, e.boss ? 520 : 260);
   fxRing(e.x, e.y, e.boss ? .12 : .025, e.boss ? 900 : 420, e.boss ? 1.2 : .45);
   fxShake(e.boss ? 22 : 4);
   AU.sfx(e.boss ? 'boom' : 'kill');
   if (e.boss) {
-    mAdd('bosses');
+    if (!e.def.mb) mAdd('bosses');
     if (!R.enemies.some(o => o.boss && !o.dead)) {
       for (const b of R.bullets) fxParts(b.x, b.y, PAL.pc[b.pol], 1, 80);
       R.bullets.length = 0; R.flipRule = false; R.killCam = 1.1;
     }
-    dropShards(e.x, e.y, 5);
+    dropShards(e.x, e.y, e.def.mb ? 1 : 4);
   } else {
     if (e.elite) {
       mAdd('elites'); G.hitstop = .05;
-      dropShards(e.x, e.y, 3); ering(e, 14, 150, rand(TAU));
+      dropShards(e.x, e.y, 2); ering(e, 14, 150, rand(TAU));
       if (chance(.15)) R.pickups.push({ x: e.x, y: e.y, kind: 'heart', t: 0 });
     }
-    if (chance(.2)) dropShards(e.x, e.y, 1);
+    if (chance(.12)) dropShards(e.x, e.y, 1);
     if (chance(.015 + .005 * P.stats.luck)) R.pickups.push({ x: e.x, y: e.y, kind: 'heart', t: 0 });
     // high ascension: the dead return fire in their own colour, so it can be absorbed
     if (R.asc >= 2) efan(e, 3, .5, aimP(e), 170, e.pol);

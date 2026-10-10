@@ -25,7 +25,8 @@
       for (let i = 0; i < (ups ? +ups[1] : 6); i++) giveUp(pick(UPS).id);
       const w = /with=([a-z,]+)/.exec(hash);
       if (w) for (const id of w[1].split(',')) giveUp(id);
-      if (hash.includes('boss')) enterRoom(R.floor.rooms.find(r => r.type === 'boss'), null);
+      if (hash.includes('crack')) { const h = R.floor.rooms.find(r => r.hidden); h.waves = []; h.cleared = true; enterRoom(h, null); }
+      else if (hash.includes('boss')) enterRoom(R.floor.rooms.find(r => r.type === 'boss'), null);
       else {
         const want = (/room=([a-z]+)/.exec(hash) || [])[1] || (hash.includes('treasure') ? 'treasure' : 'fight');
         enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length)) || R.floor.start, null);

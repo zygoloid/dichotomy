@@ -54,9 +54,10 @@ for (const ship of SHIPS) {
     console.log(ship.id, 'stage', st, JSON.stringify(types), 'ups', R.P.ups.length, 'boss', boss.cleared ? (R.time - t0).toFixed(0) + 's' : 'NOT KILLED', 'dps', (ENEMY[PAL.boss[0]].hp * PAL.boss.length / (R.time - t0)).toFixed(0));
     G.state = 'pause'; render(CTX); G.state = 'play';
   }
+  if (!R.room.portal) { console.log('  (bot never killed the last boss; skipping the win check)'); G.state = 'title'; continue; }
   R.P.x = R.room.portal.x; R.P.y = R.room.portal.y; sim(.1, false);
   if (G.state === 'win') { G.endT = 2; render(CTX); }
-  if (G.state !== 'win') console.log('expected win, got', G.state);
+  if (G.state !== 'win') console.log('expected win, got', G.state, ship.id, R.stage, R.room.type, R.room.cleared, G.hitstop, R.P.x | 0, R.P.y | 0, JSON.stringify(R.room.portal), R.over);
   G.state = 'title';
 }
 

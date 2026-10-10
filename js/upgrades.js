@@ -10,6 +10,7 @@ function baseStats() {
     pblank: 0, tether: 0, grav: 0, volley: 0, echo: 0, eraser: 0, dichro: 0, recoil: 0, ricoGrow: 0,
     pierceGrow: 0, kinetic: 0, turret: 0, berserk: 0, oppMul: 2, sameMul: 1,
     beam: 0, drone: 0, missile: 0, mine: 0, tesla: 0,
+    spinup: 0, blade: 0, rail: 0, orb: 0, flak: 0, convert: 0, ghost: 0, flail: 0, swarm: 0, map: 0,
     // pilot
     maxHp: 4, move: 300, hitR: 5, absorbR: 26, magnet: 90, luck: 0, chargeMax: 100, gain: 1, burstN: 1,
     burstDmg: 1, nova: 0, flipLock: 0, reflect: 0, graze: 0, flipSlow: 0, thorns: 0, shield: 0, vamp: 0,
@@ -67,11 +68,22 @@ U('battery', 1, 'P2,3,8,3,8,9,2,9;L4,1.5,6,1.5;L4,6,6,6;L5,5,5,7', s => { s.char
 U('nova', 1, 'C5,5,2;C5,5,4.2;D5,5,.8', s => { s.nova += 1; }, 'flips', 150);
 U('contrast', 1, 'C5,5,4;F5,1,5,9,3,8.5,1.4,6.8,1,5,1.4,3.2,3,1.5', s => { s.oppMul += 0.6; s.sameMul *= 0.6; }, 'flips', 400);
 
+U('compass', 0, 'C5,5,4;F5,1.8,6.3,5,5,8.2,3.7,5', s => { s.map += 1; s.luck += 1; }, 'rooms', 150);
+U('blade', 1, 'R1.5,8.5,7,280,350;R1.5,8.5,4.5,280,350;L1.5,8.5,4,6', s => { s.blade += 1; });
+U('spinup', 1, 'R5,4.5,3.3,0,300;L5,4.5,7.4,2.4;L1,9,3,9;L4,9,6.5,9;L7.5,9,9,9', s => { s.spinup += 1; });
+U('flak', 1, 'A1,5,4.3,5;C7,5,1.1;C7,5,2.7', s => { s.flak += 1; }, 'secrets', 1);
+U('swarm', 1, 'D5,5,1.6;A5,5,1.5,1.5;A5,5,8.5,1.5;A5,5,5,9.4', s => { s.swarm += 1; }, 'kills', 600);
+U('rail', 1, 'L1,4,9,4;L1,6,9,6;D5,5,.9;L3,2.5,3,7.5;L7,2.5,7,7.5', s => { s.rail += 1; }, 'bosses', 2);
 U('drone', 1, 'P1.5,9,4.5,3,7.5,9;P7,3.5,8.2,1,9.4,3.5', s => { s.drone += 1; });
 U('missile', 1, 'A2,8,8,2;L1.5,5.5,1.5,8.5,4.5,8.5;L4,3,7,6', s => { s.missile += 1; }, 'kills', 200);
 U('tesla', 1, 'C5,5,4.3;L5.5,1.5,3.5,4.6,6.2,5.2,4.5,8.5', s => { s.tesla += 1; }, 'absorbed', 300);
 
 // --- tier 2 ---
+U('flame', 2, 'L1,5,9,1.5;L1,5,9,8.5;R1,5,5,-30,30;R1,5,8,-25,25', s => { s.count += 2; s.rate *= 1.8; s.life *= 0.32; s.spd *= 0.75; s.pierce += 2; s.burn += 1; s.inacc += 11; s.dmg *= 0.42; s.size *= 1.5; });
+U('flail', 2, 'L1,9,3,6,4,7.5,6,4.5;P7.5,1,8.4,2.6,10,3,8.6,4,9,5.8,7.5,4.8,6,5.8,6.4,4,5,3,6.6,2.6', s => { s.flail += 1; }, 'minis', 1);
+U('ghost', 2, 'P4,2,7,8,1,8;L6,2,9,8;L7.6,2,9.6,6', s => { s.ghost += 1; }, 'runs', 5);
+U('convert', 2, 'C2.8,5,1.8;A4.6,5,6.4,5;D8,5,1.8', s => { s.convert += 1; }, 'absorbed', 600);
+U('orb', 2, 'D5,5,2;C5,5,3.6;R5,5,4.6,200,300;R5,5,4.6,20,120', s => { s.orb += 1; }, 'stage', 3);
 U('beam', 2, 'D1.8,5,1.5;F2,4.2,9.5,4.6,9.5,5.4,2,5.8', s => { s.beam += 1; s.dmg *= 0.8; s.pierce += 1; });
 U('mine', 2, 'P5,2.2,7.8,5,5,7.8,2.2,5;D5,5,1;L5,.5,5,2.2;L5,7.8,5,9.5;L.5,5,2.2,5;L7.8,5,9.5,5', s => { s.mine += 1; }, 'rooms', 40);
 U('curve', 2, 'R5,5,3.5,0,270;A5,1.5,7,1.5', s => { s.curve += 2.2; s.life *= 1.25; s.dmg *= 1.1; });

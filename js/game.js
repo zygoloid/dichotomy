@@ -22,7 +22,7 @@ function newRun() {
   const ship = SHIPS.find(s => s.id === META.ship && (s.id === 'tri' || META.un['ship:' + s.id])) || SHIPS[0];
   R = {
     ship, asc: Math.min(META.asc || 0, maxAsc()), stage: 0, time: 0, beat: 0, lastStep: -1, slowT: 0,
-    shots: [], bullets: [], enemies: [], pickups: [], parts: [], fx: [], arcs: [], booms: [], wells: [], mines: [], trails: [],
+    shots: [], bullets: [], enemies: [], pickups: [], parts: [], fx: [], arcs: [], booms: [], wells: [], mines: [], trails: [], orbs: [], slashes: [], bossMax: 1,
     offered: new Set(), killCam: 0, rerollCost: 3,
     shake: 0, inv: 0, ca: 0, flash: 0, eid: 0, shotN: 0, wave: 0, flipRule: false, lastFlipBeat: 0, over: false,
     nStages: 3 + (META.un.stage4 ? 1 : 0) + (META.un.stage5 ? 1 : 0),
@@ -30,7 +30,7 @@ function newRun() {
   };
   R.P = {
     x: W / 2, y: H / 2, vx: 0, vy: 0, kx: 0, ky: 0, pol: 0, ups: [], hp: 1, sh: 0, charge: 0, inv: 0, fireCd: 0, vq: [],
-    novaCd: 0, lockT: 0, ang: -Math.PI / 2, face: -Math.PI / 2, still: 0, drones: [], misCd: 1, mineCd: 0, teslaCd: 0, shards: 0, refl: 0, vampN: 0, seqPol: -1, seqN: 0, chain: 0, preview: null,
+    novaCd: 0, lockT: 0, ang: -Math.PI / 2, face: -Math.PI / 2, still: 0, drones: [], misCd: 1, mineCd: 0, teslaCd: 0, orbCd: 2, bladeCd: 0, heat: 0, railN: 0, hist: [], fl: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, shards: 0, refl: 0, vampN: 0, seqPol: -1, seqN: 0, chain: 0, preview: null,
     stats: null, rateBuff: 0, hit: false, firing: false, dn: 0
   };
   const P = R.P;
@@ -64,6 +64,7 @@ function enterRoom(room, dir) {
   if (dir) { const d = DOOR_POS[OPP[dir]]; P.x = d[0] + DIRV[dir][0] * 34; P.y = d[1] + DIRV[dir][1] * 34; }
   P.kx = P.ky = 0; P.hit = false;
   for (const d of P.drones) { d.x = P.x; d.y = P.y; }
+  R.orbs = []; R.slashes = []; P.hist = []; P.fl.x = P.x; P.fl.y = P.y; P.fl.vx = P.fl.vy = 0;
   room.visited = room.seen = true;
   for (const d in room.doors) room.doors[d].seen = true;
   if (!room.cleared) {
@@ -71,8 +72,10 @@ function enterRoom(room, dir) {
     if (room.type === 'boss') {
       PAL.boss.forEach((b, k) => { const e = makeEnemy(b, W / 2 + (PAL.boss.length > 1 ? (k ? 160 : -160) : 0), H / 2, k, 1.6); e.k = k; });
       AU.sfx('warp'); fxShake(10);
-    } else if (room.type === 'fight' && room.waves.length) spawnWave(room.waves[0]);
+    } else if (room.type === 'mini') { makeEnemy(room.mb, W / 2, H / 2, randi(0, 1), 1.4); AU.sfx('warp'); }
+    else if (room.type === 'fight' && room.waves.length) spawnWave(room.waves[0]);
     else room.cleared = true;
+    R.bossMax = R.enemies.reduce((a, e) => a + (e.boss ? e.maxHp + (e.extra || 0) : 0), 0) || 1;
   }
   fxRing(P.x, P.y, .03, 500, .4);
 }
@@ -104,13 +107,16 @@ function clearRoom() {
     ups.forEach((u, i) => room.peds.push({ x: W / 2 + (i - 1) * 170, y: H / 2 + 90, up: u, price: 0, group: 2, taken: false }));
     room.portal = { x: W / 2, y: 190 };
     R.pickups.push({ x: W / 2, y: H / 2 - 20, kind: 'heart', t: 0 });
+  } else if (room.type === 'mini') {
+    mAdd('minis'); dropShards(W / 2, H / 2, 2);
+    rollUps(2, s.luck + 2).forEach((u, i) => room.peds.push({ x: W / 2 + (i ? 95 : -95), y: H / 2, up: u, price: 0, group: 3, taken: false }));
   } else if (room.type === 'challenge') {
-    dropShards(W / 2, H / 2, 5);
+    dropShards(W / 2, H / 2, 3);
     R.pickups.push({ x: W / 2, y: H / 2, kind: 'heart', t: 0 });
   } else {
     const r = Math.random();
     if (r < .2 + .04 * s.luck && P.hp < s.maxHp) R.pickups.push({ x: W / 2, y: H / 2, kind: 'heart', t: 0 });
-    else if (r < .5) dropShards(W / 2, H / 2, randi(1, 2));
+    else if (r < .4) dropShards(W / 2, H / 2, 1);
   }
   toast(checkUnlocks());
   saveMeta();
@@ -310,6 +316,17 @@ function takePed(p) {
 // free pedestals in the current room that a reroll would replace
 function rerollable() { return META.un.reroll ? R.room.peds.filter(p => !p.taken && p.group && p.up) : []; }
 
+// a shot struck a wall in a room with a hidden door: chip at it if it landed on the crack
+function hitSecret(sh) {
+  const room = R.room, hd = room.hidden, dp = DOOR_POS[hd.dir];
+  if (hyp(sh.x - dp[0], sh.y - dp[1]) > 46) return;
+  hd.hp -= sh.dmg; hd.flT = G.t; fxParts(sh.x, sh.y, '#ffffff', 3, 160);
+  if (hd.hp > 0) return;
+  room.doors[hd.dir] = hd.room; hd.room.doors[OPP[hd.dir]] = room; hd.room.seen = true; room.hidden = null;
+  mAdd('secrets'); AU.sfx('boom'); fxShake(12); fxRing(dp[0], dp[1], .06, 500, .6); fxParts(dp[0], dp[1], PAL.wall, 30, 320);
+  toast(checkUnlocks());
+}
+
 function updateRoom(dt) {
   const P = R.P, room = R.room;
   if (!room.cleared && !R.enemies.length) {
@@ -343,6 +360,7 @@ function updateFx(dt) {
   for (let i = R.fx.length - 1; i >= 0; i--) { const f = R.fx[i]; if ((f.t += dt) >= f.life) R.fx.splice(i, 1); }
   for (let i = R.arcs.length - 1; i >= 0; i--) if ((R.arcs[i].t += dt) > .18) R.arcs.splice(i, 1);
   for (let i = R.booms.length - 1; i >= 0; i--) if ((R.booms[i].t += dt) > .25) R.booms.splice(i, 1);
+  for (let i = R.slashes.length - 1; i >= 0; i--) if ((R.slashes[i].t += dt) > .16) R.slashes.splice(i, 1);
   for (let i = R.trails.length - 1; i >= 0; i--) if ((R.trails[i].t += dt) > .14) R.trails.splice(i, 1);
   R.shake *= Math.exp(-dt * 9);
   R.inv = Math.max(0, R.inv - dt * 3);
@@ -355,7 +373,7 @@ function update(dt) {
   R.time += dt;
   R.beat = R.time * PAL.bpm / 60;
   const step = Math.floor(R.beat * 4);
-  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, R.stage, R.room.type === 'boss' && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0); }
+  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, R.stage, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0); }
 
   R.wells = R.room.wells.slice();
   for (const e of R.enemies) if (e.well && e.spawn <= 0 && e.well.str > 5) R.wells.push({ x: e.x, y: e.y, str: e.well.str, r: e.well.r, core: 0, floor: e.well.floor, bcore: e.well.bcore, vis: e.well.vis });
