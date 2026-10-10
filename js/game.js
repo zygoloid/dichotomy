@@ -25,7 +25,8 @@ function newRun() {
     shots: [], bullets: [], enemies: [], pickups: [], parts: [], fx: [], arcs: [], booms: [], wells: [], mines: [], trails: [], orbs: [], slashes: [], bossMax: 1,
     offered: new Set(), killCam: 0, rerollCost: 3,
     shake: 0, inv: 0, ca: 0, flash: 0, eid: 0, shotN: 0, wave: 0, flipRule: false, lastFlipBeat: 0, over: false,
-    nStages: 3 + (META.un.stage4 ? 1 : 0) + (META.un.stage5 ? 1 : 0),
+    nStages: 3 + (META.un.stage4 ? 1 : 0) + (META.un.stage5 ? 1 : 0) + (META.un.stage5 && META.un.stage6 ? 1 : 0),
+    route: rollRoute(), flow: null, line: null,
     st: { kills: 0, absorbed: 0, rooms: 0, bursts: 0, shards: 0 }, hpMul: 1, bspd: 1, room: null, floor: null, nearPed: null
   };
   R.P = {
@@ -46,7 +47,7 @@ function newRun() {
 function recompute() { const P = R.P; P.stats = computeStats(R.ship, P.ups, P.preview); P.fus = fusionsOf(P.ups, P.preview); }
 
 function startStage(i) {
-  R.stage = i; PAL = STAGES[i];
+  R.stage = i; PAL = STAGES[R.route[i]];
   R.hpMul = (1 + .4 * i) * (1 + .2 * R.asc);
   mMax('stage', i + 1);
   R.offered = new Set();
@@ -60,7 +61,7 @@ function enterRoom(room, dir) {
   const P = R.P;
   R.room = room;
   R.shots = []; R.bullets = []; R.enemies = []; R.arcs = []; R.booms = []; R.mines = []; R.trails = [];
-  R.pickups = room.pickups; R.flipRule = false; P.vq = [];
+  R.pickups = room.pickups; R.flipRule = false; R.line = null; P.vq = [];
   if (dir) { const d = DOOR_POS[OPP[dir]]; P.x = d[0] + DIRV[dir][0] * 34; P.y = d[1] + DIRV[dir][1] * 34; }
   P.kx = P.ky = 0; P.hit = false;
   for (const d of P.drones) { d.x = P.x; d.y = P.y; }
@@ -216,6 +217,7 @@ function updatePlayer(dt) {
     const wf = wellF(w, d);
     if (wf) { px += dx / d * w.str * wf; py += dy / d * w.str * wf; if (d < w.core) hurtPlayer(); }
   }
+  if (R.flow) { px += R.flow.x * 75; py += R.flow.y * 75; }
   P.x += (P.vx + P.kx + px) * dt; P.y += (P.vy + P.ky + py) * dt;
   P.still = hyp(P.vx, P.vy) < s.move * .2 ? P.still + dt : 0;
   for (const o of room.obs) { const h = circRect(P.x, P.y, 12, o); if (h) { P.x += h.x; P.y += h.y; } }
@@ -269,7 +271,19 @@ function updateBullets(dt) {
       continue;
     }
     b.x += b.vx * dt; b.y += b.vy * dt;
-    if (b.x < BX0 || b.x > BX1 || b.y < BY0 || b.y > BY1 || b.t > 14) { b.dead = true; continue; }
+    if (R.flow) { b.x += R.flow.x * 60 * dt; b.y += R.flow.y * 60 * dt; }
+    if (b.x < BX0 || b.x > BX1 || b.y < BY0 || b.y > BY1) {
+      if (b.bn <= 0 || b.t < .3) { b.dead = true; continue; }
+      b.bn--; // ricochet
+      if (b.x < BX0 || b.x > BX1) b.vx = -b.vx;
+      if (b.y < BY0 || b.y > BY1) b.vy = -b.vy;
+      b.x = clamp(b.x, BX0, BX1); b.y = clamp(b.y, BY0, BY1);
+    }
+    if (b.t > 14) { b.dead = true; continue; }
+    if (!b.fix) {
+      for (const f of R.room.fields) if ((b.x - f.x) * (b.x - f.x) + (b.y - f.y) * (b.y - f.y) < f.r * f.r) b.pol = f.pol;
+      if (R.line) b.pol = (b.x - R.line.x) * Math.sin(R.line.ang) - (b.y - R.line.y) * Math.cos(R.line.ang) > 0 ? 0 : 1;
+    }
     for (const o of obs) if (b.x > o.x && b.x < o.x + o.w && b.y > o.y && b.y < o.y + o.h) { b.dead = true; break; }
     for (const g of R.room.gates) if (g.pol !== b.pol && b.x > g.x && b.x < g.x + g.w && b.y > g.y && b.y < g.y + g.h) { b.dead = true; fxParts(b.x, b.y, PAL.pc[g.pol], 1, 80); break; }
     if (b.dead) continue;
@@ -373,8 +387,14 @@ function update(dt) {
   R.time += dt;
   R.beat = R.time * PAL.bpm / 60;
   const step = Math.floor(R.beat * 4);
-  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, R.stage, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0); }
+  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0); }
 
+  // the room's current: reverses every 16 beats unless a boss is steering it
+  const fl = R.room.flow;
+  if (fl) {
+    const a = fl.ang + (!fl.fixed && Math.floor(R.beat / 16) % 2 ? Math.PI : 0);
+    R.flow = { x: Math.cos(a), y: Math.sin(a), warn: !fl.fixed && R.beat % 16 > 14.5 };
+  } else R.flow = null;
   R.wells = R.room.wells.slice();
   for (const e of R.enemies) if (e.well && e.spawn <= 0 && e.well.str > 5) R.wells.push({ x: e.x, y: e.y, str: e.well.str, r: e.well.r, core: 0, floor: e.well.floor, bcore: e.well.bcore, vis: e.well.vis });
 
@@ -395,7 +415,7 @@ function update(dt) {
   const fb = Math.floor(R.beat / 8);
   if (fb !== R.lastFlipBeat) {
     R.lastFlipBeat = fb;
-    if ((R.stage === 3 || R.flipRule) && R.bullets.length) { for (const b of R.bullets) b.pol ^= 1; R.inv = .7; AU.sfx('swap'); }
+    if ((PAL.haz.flip || R.flipRule) && R.bullets.length) { for (const b of R.bullets) b.pol ^= 1; R.inv = .7; AU.sfx('swap'); }
   }
   updateFx(dt);
 }

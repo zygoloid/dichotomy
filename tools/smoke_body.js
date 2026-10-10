@@ -39,8 +39,8 @@ G.state = 'dead'; G.endT = 2; render(CTX); G.state = 'title';
 // 4. every stage, every room type, each boss; with a modest random build
 unlockAll(); G.god = true;
 for (const ship of SHIPS) {
-  META.ship = ship.id; newRun(); R.nStages = 5;
-  for (let st = 0; st < 5; st++) {
+  META.ship = ship.id; newRun(); R.nStages = 6;
+  for (let st = 0; st < 6; st++) {
     if (st) startStage(st);
     for (let i = 0; i < 2; i++) giveUp(pick(UPS).id);
     const types = {}; for (const r of R.floor.rooms) types[r.type] = (types[r.type] || 0) + 1;
@@ -63,8 +63,8 @@ for (const ship of SHIPS) {
 
 // 5. every upgrade individually, then all at once, in live combat
 META.ship = 'tri';
-for (const u of UPS) { newRun(); R.nStages = 5; startStage(2); giveUp(u.id); giveUp(u.id); enterRoom(room('fight'), null); sim(6); }
-newRun(); R.nStages = 5; startStage(4);
+for (const u of UPS) { newRun(); R.nStages = 6; startStage(2); giveUp(u.id); giveUp(u.id); enterRoom(room('fight'), null); sim(6); }
+newRun(); R.nStages = 6; startStage(4);
 for (const u of UPS) giveUp(u.id);
 enterRoom(room('fight'), null); sim(20); enterRoom(room('boss'), null); sim(30);
 console.log('all-upgrades build ok; shots', R.shots.length, 'state', G.state, 'frames', frames);

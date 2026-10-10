@@ -235,6 +235,7 @@ function stepShot(sh, dt, scan) {
   }
   if (s.wave) { const lat = sh.sgn * 196 * s.wave * Math.cos(14 * sh.t); vx -= Math.sin(sh.ang) * lat; vy += Math.cos(sh.ang) * lat; }
   sh.x += vx * dt; sh.y += vy * dt;
+  if (R.flow) { sh.x += R.flow.x * 80 * dt; sh.y += R.flow.y * 80 * dt; }
   // walls and blocks
   let nx = 0, ny = 0;
   if (sh.x < BX0) { nx = 1; sh.x = BX0; } else if (sh.x > BX1) { nx = -1; sh.x = BX1; }

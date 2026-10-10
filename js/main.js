@@ -21,7 +21,9 @@
       if (hash.includes('unlockall')) for (const u of UNLOCKS) META.un[u.id] = true;
       newRun();
       const m = /stage(\d)/.exec(hash), ups = /ups(\d+)/.exec(hash);
-      if (m) { R.nStages = 5; startStage(+m[1]); }
+      const th = /theme(\d)/.exec(hash);
+      if (th) { R.nStages = 6; R.route[STAGES[+th[1]].depth] = +th[1]; startStage(STAGES[+th[1]].depth); }
+      else if (m) { R.nStages = 6; startStage(+m[1]); }
       for (let i = 0; i < (ups ? +ups[1] : 6); i++) giveUp(pick(UPS).id);
       const w = /with=([a-z,]+)/.exec(hash);
       if (w) for (const id of w[1].split(',')) giveUp(id);

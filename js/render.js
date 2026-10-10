@@ -49,6 +49,22 @@ function drawBG(c, beat) {
   } else if (p.style === 3) {
     for (let i = 0; i < 9; i++) { const r = ((beat % 1) + i) * 90; c.moveTo(W / 2 + r, H / 2); c.arc(W / 2, H / 2, r, 0, TAU); }
     for (let i = 0; i < 16; i++) { const a = i * TAU / 16; c.moveTo(W / 2, H / 2); c.lineTo(W / 2 + Math.cos(a) * 900, H / 2 + Math.sin(a) * 900); }
+  } else if (p.style === 5) {
+    for (let y = 30; y < H; y += 60) for (let x = 0; x <= W; x += 40) {
+      const yy = y + Math.sin(x * .012 + G.t * 1.2 + y) * 12;
+      if (x) c.lineTo(x, yy); else c.moveTo(x, yy);
+    }
+  } else if (p.style === 6) {
+    const o = (G.t * 12) % 90;
+    for (let k = -H + o; k < W + H; k += 90) { c.moveTo(k, 0); c.lineTo(k + H, H); c.moveTo(k + H, 0); c.lineTo(k, H); }
+  } else if (p.style === 7) {
+    for (let y = 60; y < H; y += 120) { c.moveTo(0, y); c.lineTo(W, y); }
+    for (let i = 0; i < 70; i++) { const s = 2 + i % 4; c.rect((i * 173.1) % W, H - ((i * 97 + G.t * (20 + i % 5 * 12)) % H), s, s); }
+  } else if (p.style === 8) {
+    for (let i = 0; i < 9; i++) {
+      const r = 60 + i * 80, rot = Math.PI / 4 + G.t * .1 * (i % 2 ? 1 : -1);
+      for (let k = 0; k <= 4; k++) { const a = rot + k * TAU / 4, x = W / 2 + Math.cos(a) * r, y = H / 2 + Math.sin(a) * r; if (k) c.lineTo(x, y); else c.moveTo(x, y); }
+    }
   } else {
     for (let i = 0; i < 9; i++) {
       const r = 50 + i * 85, rot = G.t * .12 * (i % 2 ? 1 : -1);
@@ -190,7 +206,7 @@ function drawBeams(c) {
 }
 
 function drawBullets(c) {
-  const warn = (R.stage === 3 || R.flipRule) && R.beat % 8 > 7 && Math.sin(G.t * 40) > 0;
+  const warn = (PAL.haz.flip || R.flipRule) && R.beat % 8 > 7 && Math.sin(G.t * 40) > 0;
   for (let pol = 0; pol < 2; pol++) {
     const col = PAL.pc[warn ? pol ^ 1 : pol];
     c.beginPath();
@@ -291,6 +307,31 @@ function drawWorld(c) {
   if (R.shake * META.fx > .5) c.translate(rand(-1, 1) * R.shake * META.fx, rand(-1, 1) * R.shake * META.fx);
   drawBG(c, R.beat);
   if (room.type === 'start' && R.stage === 0) drawTutorial(c);
+  if (R.flow) {
+    // drifting chevrons show which way the current runs; they flicker just before it turns
+    const a = Math.atan2(R.flow.y, R.flow.x), o = (G.t * 90) % 120 - 60;
+    c.strokeStyle = rgba(PAL.wall, R.flow.warn && Math.sin(G.t * 30) > 0 ? .08 : .32); c.lineWidth = 2; c.beginPath();
+    for (let gx = BX0 + 70; gx < BX1 - 20; gx += 120) for (let gy = BY0 + 60; gy < BY1 - 20; gy += 100) {
+      const x = gx + R.flow.x * o, y = gy + R.flow.y * o;
+      c.moveTo(x - Math.cos(a - .6) * 13, y - Math.sin(a - .6) * 13); c.lineTo(x, y); c.lineTo(x - Math.cos(a + .6) * 13, y - Math.sin(a + .6) * 13);
+    }
+    c.stroke();
+  }
+  for (const f of room.fields) {
+    const col = PAL.pc[f.pol];
+    c.fillStyle = rgba(col, f.pol ? .08 : .13); c.beginPath(); c.arc(f.x, f.y, f.r, 0, TAU); c.fill();
+    c.strokeStyle = rgba(col, .75); c.lineWidth = 2; c.setLineDash(f.pol ? [14, 8] : []); c.lineDashOffset = G.t * 20; c.stroke(); c.setLineDash([]);
+  }
+  if (R.line) {
+    // the dividing line, edged with the colour bullets take on each side
+    const L = R.line, cs = Math.cos(L.ang), sn = Math.sin(L.ang);
+    for (const side of [1, -1]) {
+      const ox = L.x + sn * 5 * side, oy = L.y - cs * 5 * side;
+      c.strokeStyle = rgba(PAL.pc[side > 0 ? 0 : 1], .7); c.lineWidth = 3; c.setLineDash(side > 0 ? [] : [14, 8]);
+      c.beginPath(); c.moveTo(ox - cs * 1500, oy - sn * 1500); c.lineTo(ox + cs * 1500, oy + sn * 1500); c.stroke();
+    }
+    c.setLineDash([]);
+  }
   for (const w of room.wells) {
     c.fillStyle = '#000'; c.beginPath(); c.arc(w.x, w.y, w.core + 6, 0, TAU); c.fill();
     c.strokeStyle = PAL.wall; c.lineWidth = 2;

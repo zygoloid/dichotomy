@@ -13,7 +13,7 @@ const distP = e => hyp(R.P.x - e.x, R.P.y - e.y);
 function eb(x, y, a, spd, pol, r, o) {
   if (R.bullets.length > 900) return null;
   const v = spd * R.bspd;
-  const b = { x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, pol, r: r || 6, t: 0, gz: false, cv: 0, noEr: false };
+  const b = { x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, pol, r: r || 6, t: 0, gz: false, cv: 0, noEr: false, bn: PAL.haz.bounce || 0 };
   if (o) Object.assign(b, o);
   R.bullets.push(b);
   return b;
@@ -330,6 +330,81 @@ E('eclipse', {
   }
 });
 
+// --- alternate-floor and final bosses
+// swings the room's current around while it fires, so every pattern arrives skewed
+E('tide', {
+  hp: 1300, r: 50, sides: 5, boss: true,
+  init(e) { e.pat = 0; e.pt = 0; e.cd = 1; e.sa = 0; e.q = 0; e.fa = 0; },
+  ai(e, dt) {
+    const hard = e.hp < e.maxHp * .5;
+    moveTo(e, W / 2 + Math.sin(e.t * .5) * 300, H / 2 - 60 + Math.cos(e.t * .7) * 80, 80, dt, 1.5); e.rot -= dt * .7;
+    e.fa += dt * (hard ? .5 : .28); R.room.flow = { ang: e.fa, fixed: true };
+    if ((e.pt += dt) > 6) { e.pt = 0; e.pat = (e.pat + 1) % 3; e.pol ^= 1; fxRing(e.x, e.y, .04, 500, .5); }
+    if (e.pt < 1 || (e.cd -= dt * (hard ? 1.3 : 1)) > 0) return;
+    if (e.pat === 0) { e.cd = .7; e.q ^= 1; efan(e, 9, 2.6, aimP(e), 150, e.q); }
+    else if (e.pat === 1) { e.cd = .1; e.sa += .23; eb(e.x, e.y, e.sa, 160, 0); eb(e.x, e.y, e.sa + Math.PI, 160, 1); }
+    else { e.cd = .8; e.q ^= 1; ering(e, 14, 140, e.t, e.q); }
+  }
+});
+// six-fold symmetric patterns in a room where everything ricochets
+E('kalei', {
+  hp: 1900, r: 46, sides: 6, boss: true,
+  init(e) { e.pat = 0; e.pt = 0; e.cd = 1; e.q = 0; e.la = 0; },
+  ai(e, dt) {
+    const hard = e.hp < e.maxHp * .5;
+    moveTo(e, W / 2 + Math.sin(e.t * .3) * 120, H / 2 + Math.cos(e.t * .4) * 60, 50, dt, 1); e.rot += dt * .4;
+    if ((e.pt += dt) > 6) { e.pt = 0; e.pat = (e.pat + 1) % 3; e.pol ^= 1; fxRing(e.x, e.y, .04, 500, .5); }
+    if (e.pt < 1 || (e.cd -= dt * (hard ? 1.3 : 1)) > 0) return;
+    if (e.pat === 0) { e.cd = .45; e.q ^= 1; for (let k = 0; k < 6; k++) eb(e.x, e.y, e.rot + k * TAU / 6, 175, (k + e.q) & 1, 6, hard ? { bn: 2 } : null); }
+    else if (e.pat === 1) { e.cd = .9; e.q ^= 1; ering(e, 10, 130, e.rot * 2, e.q, 9); }
+    else { e.cd = .12; e.la = turnTo(e.la, aimP(e), .09); for (let k = 0; k < 4; k++) eb(e.x, e.y, e.la + k * Math.PI / 2, 250, k & 1, 5); }
+  }
+});
+// a rotating line through the boss splits the room in two; bullets take the colour of their half
+E('binary', {
+  hp: 3000, r: 44, sides: 0, boss: true, half: true,
+  init(e) { e.pat = 0; e.pt = 0; e.cd = 1; e.sa = 0; e.la = 0; e.ld = 1; },
+  ai(e, dt) {
+    const hard = e.hp < e.maxHp * .4;
+    moveTo(e, W / 2 + Math.sin(e.t * .3) * 160, H / 2 + Math.cos(e.t * .45) * 70, 50, dt, 1);
+    e.la += e.ld * dt * (hard ? .6 : .38); e.rot = e.la; R.line = { x: e.x, y: e.y, ang: e.la };
+    if ((e.pt += dt) > 6) { e.pt = 0; e.pat = (e.pat + 1) % 3; e.ld = -e.ld; e.pol ^= 1; fxRing(e.x, e.y, .04, 500, .5); }
+    if (e.pt < 1 || (e.cd -= dt * (hard ? 1.3 : 1)) > 0) return;
+    if (e.pat === 0) { e.cd = .8; ering(e, 22, 140, rand(TAU)); }
+    else if (e.pat === 1) { e.cd = .09; e.sa += .2; for (let k = 0; k < 3; k++) eb(e.x, e.y, e.sa + k * TAU / 3, 165, 0); }
+    else { e.cd = .45; efan(e, 7, 1.1, aimP(e), 230, randi(0, 1), 6, { fix: true }); } // these keep their own colour
+  }
+});
+// final boss: one phase per trick the alternate floors taught, then the colour-swap rule on top
+E('crown', {
+  hp: 9000, r: 56, sides: 8, boss: true,
+  init(e) {
+    e.pt = 0; e.cd = 1; e.c2 = 2; e.sa = 0; e.s2 = 0; e.q = 0; e.lb = -1; e.la = 0; e.fa = 0;
+    e.beams = [{ ang: 0, pol: 0, state: 'off' }, { ang: Math.PI, pol: 1, state: 'off' }];
+  },
+  ai(e, dt) {
+    const f = e.hp / e.maxHp, ph = f > .66 ? 0 : f > .33 ? 1 : 2;
+    moveTo(e, W / 2 + Math.sin(e.t * .35) * 200, H / 2 - 40 + Math.cos(e.t * .5) * 90, 60, dt, 1.2); e.rot += dt * (.4 + ph * .3);
+    if (ph !== e.ph) { e.ph = ph; e.pt = 0; e.pol ^= 1; fxRing(e.x, e.y, .09, 700, .9); fxShake(14); R.bullets.length = 0; R.line = null; R.room.flow = null; }
+    e.pt += dt;
+    const beat = onBeat(e), sw = Math.sin(R.beat * Math.PI / 8) * .6;
+    R.flipRule = ph === 2;
+    e.s2 += dt * .4; e.beams[0].ang = e.s2 + sw; e.beams[1].ang = e.s2 + Math.PI - sw;
+    e.beams[0].state = e.beams[1].state = ph !== 2 ? 'off' : e.pt < 1.6 ? 'warn' : 'on';
+    if (e.pt < 1) return;
+    e.cd -= dt; e.c2 -= dt;
+    if (ph === 0) {
+      e.la += dt * .45; R.line = { x: e.x, y: e.y, ang: e.la };
+      if (e.cd <= 0) { e.cd = .7; ering(e, 20, 145, rand(TAU)); }
+      if (e.c2 <= 0) { e.c2 = 1.6; efan(e, 5, .8, aimP(e), 230, randi(0, 1), 6, { fix: true }); }
+    } else if (ph === 1) {
+      e.fa += dt * .6; R.room.flow = { ang: e.fa, fixed: true };
+      if (beat && e.lb % 2 === 0) { e.q ^= 1; bulletWall(e.q, true, (e.lb / 2) & 1); }
+      if (e.cd <= 0) { e.cd = .5; efan(e, 3, .5, aimP(e), 210, e.q); }
+    } else if (e.cd <= 0) { e.cd = .14; e.sa += .21; for (let k = 0; k < 4; k++) eb(e.x, e.y, e.sa + k * TAU / 4, 170, k & 1); }
+  }
+});
+
 // ---------------------------------------------------------------- lifecycle
 function makeEnemy(type, x, y, pol, spawnT) {
   const def = ENEMY[type];
@@ -370,7 +445,7 @@ function killEnemy(e) {
     if (!e.def.mb) mAdd('bosses');
     if (!R.enemies.some(o => o.boss && !o.dead)) {
       for (const b of R.bullets) fxParts(b.x, b.y, PAL.pc[b.pol], 1, 80);
-      R.bullets.length = 0; R.flipRule = false; R.killCam = 1.1;
+      R.bullets.length = 0; R.flipRule = false; R.killCam = 1.1; R.line = null; R.room.flow = null;
     }
     dropShards(e.x, e.y, e.def.mb ? 1 : 4);
   } else {

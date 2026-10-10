@@ -61,7 +61,7 @@ const AU = {
   SCALE: [0, 3, 5, 7, 10, 12, 15],
   BASS: [[0, 0, 5, 0, 3, 0, 5, 4], [0, 4, 0, 2, 0, 4, 3, 2], [0, 0, 0, 3, 0, 0, 2, 1], [0, 5, 0, 5, 3, 5, 0, 4], [0, 2, 4, 5, 0, 5, 4, 2]],
   // i = sixteenth-note index; level 0 calm, 1 combat, 2 boss
-  step(i, stage, level) {
+  step(i, stage, level) { // stage = the theme's music index
     if (!this.ctx || this.mute) return;
     const s = i % 16, bar = Math.floor(i / 16), root = this.ROOT[stage % 5];
     const nt = d => root * Math.pow(2, this.SCALE[d % 7] / 12);

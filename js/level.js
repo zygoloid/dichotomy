@@ -1,13 +1,23 @@
 'use strict';
-// Stage themes. pc = [light, dark] polarity colours; light always renders solid with a
+// Floor themes. A run visits one theme per depth slot (see SLOTS); haz lists the theme's room
+// hazards as probabilities. pc = [light, dark] polarity colours; light always renders solid with a
 // white core and dark as a hollow ring, so the two stay readable in any palette.
 const STAGES = [
-  { pc: ['#5ff4ff', '#ff3d9a'], bg: '#04050d', line: '#1c2f7a', wall: '#3d6bff', bpm: 120, style: 0, boss: ['mono'] },
-  { pc: ['#b6ff5c', '#b45cff'], bg: '#0a0612', line: '#47226e', wall: '#ff8a3d', bpm: 128, style: 1, boss: ['gem', 'gem'] },
-  { pc: ['#ffe66b', '#4a7dff'], bg: '#020308', line: '#231a55', wall: '#8b5cff', bpm: 100, style: 2, boss: ['sing'] },
-  { pc: ['#bfe9ff', '#ff5a36'], bg: '#0c0404', line: '#5a1414', wall: '#ff2d55', bpm: 140, style: 3, boss: ['metro'] },
-  { pc: ['#7dffd0', '#ff4ae0'], bg: '#000000', line: '#2c2c3a', wall: '#ffffff', bpm: 150, style: 4, boss: ['eclipse'] }
+  { pc: ['#5ff4ff', '#ff3d9a'], bg: '#04050d', line: '#1c2f7a', wall: '#3d6bff', bpm: 120, style: 0, boss: ['mono'], mus: 0, depth: 0, haz: {} },
+  { pc: ['#b6ff5c', '#b45cff'], bg: '#0a0612', line: '#47226e', wall: '#ff8a3d', bpm: 128, style: 1, boss: ['gem', 'gem'], mus: 1, depth: 1, haz: { gate: .6 } },
+  { pc: ['#ffe66b', '#4a7dff'], bg: '#020308', line: '#231a55', wall: '#8b5cff', bpm: 100, style: 2, boss: ['sing'], mus: 2, depth: 2, haz: { well: 1, wellN: 2 } },
+  { pc: ['#bfe9ff', '#ff5a36'], bg: '#0c0404', line: '#5a1414', wall: '#ff2d55', bpm: 140, style: 3, boss: ['metro'], mus: 3, depth: 3, haz: { flip: 1 } },
+  { pc: ['#7dffd0', '#ff4ae0'], bg: '#000000', line: '#2c2c3a', wall: '#ffffff', bpm: 150, style: 4, boss: ['eclipse'], mus: 4, depth: 4, haz: { well: .4, gate: .3 } },
+  // alternates for the first three depths
+  { pc: ['#7df9ff', '#ff7a3d'], bg: '#020a0c', line: '#0f4d55', wall: '#22d3c5', bpm: 112, style: 5, boss: ['tide'], mus: 1, depth: 0, haz: { flow: .75 } },
+  { pc: ['#fff27d', '#ff4d6d'], bg: '#0b0508', line: '#4d1832', wall: '#e85d9a', bpm: 132, style: 6, boss: ['kalei'], mus: 3, depth: 1, haz: { bounce: 1 } },
+  { pc: ['#ffd0a1', '#a66bff'], bg: '#0a0502', line: '#4d2408', wall: '#ff7b1c', bpm: 108, style: 7, boss: ['binary'], mus: 2, depth: 2, haz: { field: .75 } },
+  // the last floor: bullets ricochet and every room draws one hazard from the whole set
+  { pc: ['#fff6d6', '#ff2e63'], bg: '#070500', line: '#4a3a08', wall: '#ffd23f', bpm: 160, style: 8, boss: ['crown'], mus: 4, depth: 5, haz: { bounce: 1, pick: 1 } }
 ];
+// theme choices per depth, and the unlock that gates each alternate
+const SLOTS = [[0, 5], [1, 6], [2, 7], [3], [4], [8]], ALT_UNLOCK = { 5: 'alt1', 6: 'alt2', 7: 'alt3' };
+const rollRoute = () => SLOTS.map(o => pick(o.filter(t => !ALT_UNLOCK[t] || META.un[ALT_UNLOCK[t]])));
 let PAL = STAGES[0];
 
 const DIRV = { n: [0, -1], s: [0, 1], w: [-1, 0], e: [1, 0] }, OPP = { n: 's', s: 'n', w: 'e', e: 'w' };
@@ -72,6 +82,19 @@ function genGates() {
     : [{ x: BX0, y: 235, w: BX1 - BX0, h: 10, pol: p }, { x: BX0, y: 475, w: BX1 - BX0, h: 10, pol: q }];
 }
 
+// Colour fields repaint any enemy bullet that drifts into them.
+function genFields() { return genWells(2).map((w, i) => ({ x: w.x, y: w.y, r: rand(120, 160), pol: i })); }
+
+function addHazards(r) {
+  const hz = PAL.haz;
+  let k = { well: chance(hz.well || 0), gate: chance(hz.gate || 0), flow: chance(hz.flow || 0), field: chance(hz.field || 0) };
+  if (hz.pick) { k = {}; if (chance(.85)) k[pick(['well', 'gate', 'flow', 'field'])] = true; }
+  if (k.gate) { r.obs = []; r.gates = genGates(); }
+  if (k.well) r.wells = genWells(randi(1, hz.wellN || 1));
+  if (k.flow) r.flow = { ang: pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) };
+  if (k.field) r.fields = genFields();
+}
+
 function genWells(n) {
   const out = [];
   for (let g = 0; out.length < n && g < 40; g++) {
@@ -86,7 +109,7 @@ function genWells(n) {
 function genFloor(stage) {
   const rooms = [], map = {}, key = (x, y) => x + ',' + y, dirs = Object.values(DIRV);
   const add = (x, y, type) => {
-    const r = { gx: x, gy: y, type, doors: {}, cleared: false, visited: false, seen: false, obs: [], gates: [], wells: [], hidden: null, mb: null, waves: [], peds: [], pickups: [], portal: null, depth: 0 };
+    const r = { gx: x, gy: y, type, doors: {}, cleared: false, visited: false, seen: false, obs: [], gates: [], wells: [], fields: [], flow: null, hidden: null, mb: null, waves: [], peds: [], pickups: [], portal: null, depth: 0 };
     rooms.push(r); map[key(x, y)] = r; return r;
   };
   const nb = (x, y) => dirs.filter(d => map[key(x + d[0], y + d[1])]).length;
@@ -138,9 +161,7 @@ function genFloor(stage) {
   for (const r of rooms) {
     if (r.type === 'fight') {
       r.obs = genObstacles(); r.waves = genWaves(stage, r.depth);
-      if ((stage === 1 && chance(.6)) || (stage === 4 && chance(.3))) { r.obs = []; r.gates = genGates(); }
-      if (stage === 2) r.wells = genWells(randi(1, 2));
-      else if (stage === 4 && chance(.4)) r.wells = genWells(1);
+      addHazards(r);
     } else if (r.type === 'treasure') {
       const n = META.un.ped3 ? 3 : 2, ups = rollUps(n, luck);
       ups.forEach((u, i) => r.peds.push({ x: W / 2 + (i - (ups.length - 1) / 2) * 190, y: H / 2, up: u, price: 0, group: 1, taken: false }));
