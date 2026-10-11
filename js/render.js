@@ -95,7 +95,7 @@ function drawRoomFrame(c) {
     // hairline cracks where a secret door can be shot open
     const [x, y] = DOOR_POS[room.hidden.dir], v = DIRV[room.hidden.dir], hot = G.t - room.hidden.flT < .15;
     c.save(); c.translate(x, y); c.rotate(Math.atan2(v[1], v[0]));
-    c.strokeStyle = hot ? '#fff' : rgba('#ffffff', .5); c.lineWidth = hot ? 2.5 : 1.2;
+    c.scale(.7, .7); c.strokeStyle = hot ? '#fff' : rgba(PAL.wall, .45); c.lineWidth = hot ? 3 : 1.2;
     c.beginPath(); c.moveTo(-1, -26); c.lineTo(-7, -14); c.lineTo(-2, -6); c.lineTo(-10, 4); c.lineTo(-3, 12); c.lineTo(-8, 24);
     c.moveTo(-7, -14); c.lineTo(-14, -18); c.moveTo(-10, 4); c.lineTo(-16, 8); c.stroke();
     c.restore();
@@ -121,17 +121,27 @@ function drawTutorial(c) {
   mouseGlyph(c, 500, y, 0); icon(c, UP.dmg.icon, 540, y, 26, '#fff');
   keycap(c, 690, y, 'SPACE', 70); mouseGlyph(c, 748, y, 1); icon(c, UP.contrast.icon, 790, y, 26, '#fff');
   keycap(c, 940, y, 'Q'); icon(c, UP.burst.icon, 980, y, 26, '#fff');
-  // the rule: same colour feeds you, the other colour kills you
-  const row = (x, bp, ok) => {
-    const yy = 180;
-    c.beginPath(); c.arc(x + 130, yy, 14, 0, TAU); polFill(c, 0);
-    for (let i = 0; i < 3; i++) {
-      const bx = x + ((G.t * 60 + i * 34) % 100);
-      c.beginPath(); c.arc(bx, yy, 6, 0, TAU); polFill(c, bp, false, 1.5);
-    }
-    icon(c, ok ? UP.cap.icon : MSTAT_ICON.kills, x + 176, yy, 24, ok ? GOOD : BAD);
+  // The rules, as a flat sign: same colour feeds you and shrugs off your shots; the other
+  // colour hurts you and is the only thing your shots can hurt.
+  const px = W / 2 - 340, py = 92, pw = 680, ph = 84, cy = py + ph / 2;
+  c.globalAlpha = 1;
+  c.fillStyle = 'rgba(255,255,255,.04)'; c.strokeStyle = 'rgba(255,255,255,.3)'; c.lineWidth = 1.5; c.setLineDash([3, 5]);
+  c.beginPath(); c.roundRect(px, py, pw, ph, 8); c.fill(); c.stroke(); c.setLineDash([]);
+  c.fillStyle = PAL.bg; c.fillRect(px + 14, py - 9, 22, 18);
+  c.strokeStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.arc(px + 25, py, 8, 0, TAU); c.stroke();
+  c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(px + 24, py - 1, 2, 5); c.fillRect(px + 24, py - 5, 2, 2);
+  c.globalAlpha = .5;
+  const cell = (i, left, right, ok) => {
+    const x = px + 62 + i * 160;
+    left(x); icon(c, 'A1,5,9,5', x + 34, cy, 20, '#fff', 1.2); right(x + 68);
+    icon(c, ok ? 'L2,5.5,4.2,8,8.5,2.5' : MSTAT_ICON.kills, x + 98, cy, 16, ok ? GOOD : BAD, 1.6);
+    if (i < 3) { c.fillStyle = 'rgba(255,255,255,.3)'; c.fillRect(x + 122, py + 16, 1, ph - 32); }
   };
-  row(330, 0, true); row(750, 1, false);
+  const ship = x => { shipPath(c, R.ship.id, x, cy, 9, 0); polFill(c, 0, false, 1.5); };
+  const shot = pol => x => { c.beginPath(); c.arc(x, cy, 5, 0, TAU); polFill(c, pol, false, 1.5); };
+  const foe = pol => x => { polyPath(c, x, cy, 10, 4, Math.PI / 4); polFill(c, pol, false, 1.5); };
+  cell(0, shot(0), ship, true); cell(1, shot(1), ship, false);
+  cell(2, ship, foe(1), true); cell(3, ship, foe(0), false);
   c.restore();
 }
 
@@ -175,6 +185,7 @@ function drawEnemy(c, e) {
     c.fillStyle = 'rgba(255,255,255,.8)'; polyPath(c, x, y, r * .35, d.sides, e.rot); c.fill();
   }
   if (d.mirror) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.moveTo(x - cs * r * .6, y - sn * r * .6); c.lineTo(x + cs * r * .6, y + sn * r * .6); c.stroke(); }
+  if (e.df > 0) { c.strokeStyle = col; c.lineWidth = 3; polyPath(c, x, y, r + 7, 6, G.t * 4); c.stroke(); }
   if (e.elite) {
     c.strokeStyle = SHARD; c.lineWidth = 2;
     polyPath(c, x, y, r + 10, 3, G.t * 2); c.stroke(); polyPath(c, x, y, r + 10, 3, G.t * 2 + Math.PI); c.stroke();

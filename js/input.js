@@ -1,7 +1,7 @@
 'use strict';
 const IN = {
   keys: {}, pressed: {}, mx: W / 2, my: H / 2, mb: [false, false, false], mhit: [false, false, false],
-  canvas: null, any: false, mouseAim: false,
+  canvas: null, any: false, mouseAim: false, mouseIdle: 0,
   padMove: { x: 0, y: 0 }, padAim: { x: 0, y: 0 }, padPrev: [],
   // Twin-stick pad: left stick moves, right stick aims and fires. Buttons are folded into
   // the same key codes the keyboard uses, so the rest of the game needs no pad logic.
@@ -36,7 +36,7 @@ const IN = {
       const r = this.canvas.getBoundingClientRect();
       this.mx = (e.clientX - r.left) / r.width * W;
       this.my = (e.clientY - r.top) / r.height * H;
-      this.mouseAim = true;
+      this.mouseAim = true; this.mouseIdle = 0;
     };
     window.addEventListener('mousemove', pos);
     window.addEventListener('mousedown', e => { pos(e); if (e.button < 3) { this.mb[e.button] = true; this.mhit[e.button] = true; } this.any = true; });

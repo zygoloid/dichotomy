@@ -45,6 +45,10 @@
     const dt = Math.min(1 / 30, Math.max(0.001, (now - last) / 1000));
     last = now;
     IN.pollPad();
+    // show the crosshair only while the mouse is the aiming device and has been touched lately
+    IN.mouseIdle += dt;
+    const cur = IN.mouseAim && (IN.mouseIdle < 3 || IN.mb[0]) ? 'crosshair' : 'none';
+    if (IN.canvas.style.cursor !== cur) IN.canvas.style.cursor = cur;
     if (G.demo && R && G.state === 'play') demoBot();
     frame(dt);
     const o = render(ctx);
@@ -55,7 +59,8 @@
   requestAnimationFrame(tick);
 })();
 
-// crude autopilot: circle, shoot the nearest enemy, match the nearest bullet's polarity
+// crude autopilot: circle, shoot the nearest enemy; match the colour of any close bullet,
+// otherwise take the colour that can hurt the target
 function demoBot() {
   const P = R.P, e = nearestEnemy(P.x, P.y, 2000);
   IN.keys = {};
@@ -66,6 +71,6 @@ function demoBot() {
   IN.mb[0] = true;
   let nb = null, nd = 160 * 160;
   for (const b of R.bullets) { const d = (b.x - P.x) * (b.x - P.x) + (b.y - P.y) * (b.y - P.y); if (d < nd) { nd = d; nb = b; } }
-  if (nb && nb.pol !== P.pol) IN.pressed.Space = true;
+  if (nb ? nb.pol !== P.pol : e && e.pol === P.pol && P.stats.sameMul <= 0) IN.pressed.Space = true;
   if (P.charge >= P.stats.chargeMax) IN.pressed.KeyQ = true;
 }

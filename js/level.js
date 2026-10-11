@@ -176,9 +176,17 @@ function genFloor(stage) {
     } else if (r.type === 'mini') {
       r.mb = pick(['hydra', 'lancer', 'carousel']);
     } else if (r.type === 'secret') {
-      r.peds.push({ x: W / 2, y: H / 2 - 20, up: rollUps(1, 6)[0], price: 0, taken: false });
-      r.pickups.push({ x: W / 2 - 150, y: H / 2, kind: 'heart', t: 0 });
-      for (let i = 0; i < 5; i++) r.pickups.push({ x: W / 2 + 130 + rand(40), y: H / 2 - 20 + rand(40), kind: 'shard', t: 0 });
+      // what a secret holds varies: an item, a choice, a bargain, a hoard, a bad idea...
+      const ped = (x, up, o) => r.peds.push(Object.assign({ x, y: H / 2, up, price: 0, taken: false }, o));
+      const loot = (kind, n) => { for (let i = 0; i < n; i++) r.pickups.push({ x: W / 2 + rand(-170, 170), y: H / 2 + rand(-120, 120), kind, t: 0 }); };
+      const kind = wpick(['item', 'choice', 'hoard', 'hearts', 'bargain', 'cursed', 'jackpot'], k => k === 'jackpot' ? 1 : k === 'item' ? 4 : 3);
+      if (kind === 'item') { ped(W / 2, rollUps(1, 6)[0]); loot('shard', randi(0, 3)); }
+      else if (kind === 'choice') rollUps(3, 4).forEach((u, i) => ped(W / 2 + (i - 1) * 170, u, { group: 4 }));
+      else if (kind === 'hoard') loot('shard', randi(9, 14));
+      else if (kind === 'hearts') { loot('heart', randi(2, 3)); loot('shard', randi(1, 4)); }
+      else if (kind === 'bargain') rollUps(3, 4).forEach((u, i) => ped(W / 2 + (i - 1) * 170, u, { price: 6 + stage * 2 }));
+      else if (kind === 'cursed') { rollUps(2, 0, u => u.tier === 3).forEach((u, i) => ped(W / 2 + (i ? 100 : -100), u)); loot('heart', 1); }
+      else rollUps(2, 8).forEach((u, i) => ped(W / 2 + (i ? 100 : -100), u));
     } else if (r.type === 'altar') {
       rollUps(2, 6, u => u.tier >= 1).forEach((u, i) => r.peds.push({ x: W / 2 + (i ? 110 : -110), y: H / 2, up: u, price: 0, hpCost: 1, taken: false }));
     } else if (r.type === 'start' && META.un.startped && stage === 0) {

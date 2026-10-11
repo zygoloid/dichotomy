@@ -4,6 +4,10 @@
 // which is what lets any set of upgrades combine. A beam is the same shot traced to the
 // end of its life in a single frame, so beams curve, bounce, home and split too.
 
+// damage multiplier for something of colour pol striking enemy e
+const polMul = (pol, e) => pol !== e.pol ? R.P.stats.oppMul : R.P.stats.sameMul;
+const noHurt = pol => R.P.stats.sameMul <= 0 ? pol : undefined;
+
 function shotDmg() {
   const P = R.P, s = P.stats;
   let d = s.dmg;
@@ -90,7 +94,7 @@ function updateSecondary(dt) {
     const d = P.drones[i] || (P.drones[i] = { x: P.x, y: P.y, cd: 0, ang: 0 });
     const a = P.face + Math.PI + (i - (s.drone - 1) / 2) * .9, k = Math.min(1, 8 * dt);
     d.x = lerp(d.x, P.x + Math.cos(a) * 40, k); d.y = lerp(d.y, P.y + Math.sin(a) * 40, k);
-    const t = nearestEnemy(d.x, d.y, 520);
+    const t = nearestEnemy(d.x, d.y, 520, null, noHurt(P.fus.twin ? P.pol ^ 1 : P.pol));
     if (t) d.ang = Math.atan2(t.y - d.y, t.x - d.x); else d.ang = P.face;
     if ((d.cd -= dt) <= 0 && t) {
       d.cd = 2 / s.rate;
@@ -139,7 +143,7 @@ function updateSecondary(dt) {
   if (s.tesla && (P.teslaCd -= dt) <= 0) {
     const seen = new Set(); let fx = P.x, fy = P.y, d = shotDmg() * 1.2;
     for (let i = 0; i < 1 + s.tesla + s.chain; i++) {
-      const t = nearestEnemy(fx, fy, i ? 230 : 260, seen);
+      const t = nearestEnemy(fx, fy, i ? 230 : 260, seen, noHurt(P.pol));
       if (!t) break;
       if (!i) P.teslaCd = .9;
       seen.add(t); R.arcs.push({ x0: fx, y0: fy, x1: t.x, y1: t.y, t: 0, pol: P.pol });
@@ -158,10 +162,11 @@ function releaseBurst() {
   fxRing(P.x, P.y, .07, 700, .7); fxShake(8); AU.sfx('burst');
 }
 
-function explodeAt(x, y, rad, dmg, skip) {
+// pol: the colour of the blast, if it came from a shot; colourless blasts hurt everything
+function explodeAt(x, y, rad, dmg, skip, pol) {
   const st = R.P.stats;
   for (const e of R.enemies) if (e !== skip && !e.dead && hyp(e.x - x, e.y - y) < rad + e.r) {
-    damageEnemy(e, dmg);
+    damageEnemy(e, dmg * (pol === undefined ? 1 : polMul(pol, e)));
     if (R.P.fus.afterburn) { e.burn = 3; e.burnDps = Math.max(e.burnDps, st.burn * st.dmg * .35); }
   }
   R.booms.push({ x, y, r: rad, t: 0 });
@@ -182,7 +187,14 @@ function hitEnemy(sh, e) {
   if (sh.ret) d *= 1 + .4 * s.boom;
   const crit = chance(s.crit);
   if (crit) d *= s.critMul;
-  d *= sh.pol !== e.pol ? s.oppMul : s.sameMul;
+  const base = d, m = polMul(sh.pol, e);
+  if (m <= 0) {
+    // wrong colour: the shot glances off and none of its effects apply
+    e.df = .14; fxParts(sh.x, sh.y, PAL.pc[e.pol], 2, 120); AU.sfx('tink');
+    if (sh.pierce > 0) { sh.pierce--; (sh.hit || (sh.hit = new Set())).add(e); } else killShot(sh);
+    return;
+  }
+  d *= m;
   if (R.P.fus.shock && e.burn > 0 && e.slowT > 0) d *= 1.5;
   if (!e.boss) { e.vx += Math.cos(sh.ang) * s.knock; e.vy += Math.sin(sh.ang) * s.knock; }
   if (s.burn) { e.burn = 3; e.burnDps = Math.max(e.burnDps, s.burn * s.dmg * .35); }
@@ -190,14 +202,14 @@ function hitEnemy(sh, e) {
   damageEnemy(e, d, crit);
   fxParts(sh.x, sh.y, PAL.pc[sh.pol], 2, 140);
   AU.sfx('hit');
-  if (s.explode || sh.ex) explodeAt(sh.x, sh.y, (s.explode + sh.ex) * (.7 + sh.r / 16), d * .6, e);
+  if (s.explode || sh.ex) explodeAt(sh.x, sh.y, (s.explode + sh.ex) * (.7 + sh.r / 16), base * .6, e, sh.pol);
   if (s.chain) {
     const seen = new Set([e]); let from = e;
     for (let i = 0; i < s.chain; i++) {
       const t = nearestEnemy(from.x, from.y, 230, seen);
       if (!t) break;
       seen.add(t); R.arcs.push({ x0: from.x, y0: from.y, x1: t.x, y1: t.y, t: 0, pol: sh.pol });
-      damageEnemy(t, d * .5); from = t;
+      damageEnemy(t, base * .5 * polMul(sh.pol, t)); from = t;
     }
   }
   if (sh.split > 0) for (const k of [-.5, .5])
@@ -219,11 +231,11 @@ function stepShot(sh, dt, scan) {
   sh.t += dt;
   const f = sh.t / sh.life;
   if (f >= 1) {
-    if (s.flak && !sh.kid) explodeAt(sh.x, sh.y, 52 * Math.sqrt(s.flak) * (.7 + sh.r / 16), sh.dmg * .9);
+    if (s.flak && !sh.kid) explodeAt(sh.x, sh.y, 52 * Math.sqrt(s.flak) * (.7 + sh.r / 16), sh.dmg * .5, null, sh.pol);
     killShot(sh); return;
   }
   sh.r = sh.r0 * (1 + s.grow * f * 1.2);
-  if (sh.hom) { const t = nearestEnemy(sh.x, sh.y, 420, sh.hit); if (t) sh.ang = turnTo(sh.ang, Math.atan2(t.y - sh.y, t.x - sh.x), sh.hom * dt); }
+  if (sh.hom) { const t = nearestEnemy(sh.x, sh.y, 420, sh.hit, noHurt(sh.pol)); if (t) sh.ang = turnTo(sh.ang, Math.atan2(t.y - sh.y, t.x - sh.x), sh.hom * dt); }
   if (s.curve) sh.ang += s.curve * sh.sgn * dt;
   if (s.tether && hyp(P.x - sh.x, P.y - sh.y) > 70) sh.ang = turnTo(sh.ang, Math.atan2(P.y - sh.y, P.x - sh.x), s.tether * 2.6 * dt);
   if (s.boom && !sh.ret && f > .5) { sh.ret = true; sh.hit = null; sh.ang = Math.atan2(P.y - sh.y, P.x - sh.x); }

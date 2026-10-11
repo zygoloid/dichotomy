@@ -31,7 +31,7 @@ const AU = {
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
     s.connect(f); f.connect(g); g.connect(this.out); s.start(t, Math.random() * 0.3, d + 0.02);
   },
-  GAP: { shoot: .05, hit: .04, absorb: .03, kill: .05, graze: .06 },
+  GAP: { shoot: .05, hit: .04, tink: .05, absorb: .03, kill: .05, graze: .06 },
   sfx(n, v) {
     if (!this.ctx || this.mute) return;
     const t = this.ctx.currentTime;
@@ -41,6 +41,7 @@ const AU = {
       case 'shoot': this.tone(620 + rand(60), .06, 'square', .035, 300); break;
       case 'hit': this.noise(.04, .08, 3200); break;
       case 'absorb': this.tone(500 + (v || 0) * 6, .07, 'sine', .09, 900 + (v || 0) * 8); break;
+      case 'tink': this.tone(1500, .035, 'triangle', .05, 900); break;
       case 'graze': this.tone(1800, .03, 'triangle', .04); break;
       case 'flip': this.tone(v ? 240 : 480, .12, 'sawtooth', .07, v ? 480 : 240); break;
       case 'deny': this.tone(110, .1, 'square', .08, 90); break;

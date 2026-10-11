@@ -8,7 +8,7 @@ function baseStats() {
     pierce: 0, bounce: 0, homing: 0, wave: 0, curve: 0, boom: 0, split: 0, frag: 0, explode: 0, chain: 0,
     burn: 0, slow: 0, crit: 0.05, critMul: 2, knock: 50, back: 0, side: 0, orbit: 0, accel: 0, grow: 0,
     pblank: 0, tether: 0, grav: 0, volley: 0, echo: 0, eraser: 0, dichro: 0, recoil: 0, ricoGrow: 0,
-    pierceGrow: 0, kinetic: 0, turret: 0, berserk: 0, oppMul: 2, sameMul: 1,
+    pierceGrow: 0, kinetic: 0, turret: 0, berserk: 0, oppMul: 2, sameMul: 0, // same-colour hits are deflected unless an upgrade says otherwise
     beam: 0, drone: 0, missile: 0, mine: 0, tesla: 0,
     spinup: 0, blade: 0, rail: 0, orb: 0, flak: 0, convert: 0, ghost: 0, flail: 0, swarm: 0, map: 0,
     // pilot
@@ -94,7 +94,7 @@ U('lance', 2, 'A1,9,9,1;L3,4,6,7;L5,2.5,7.5,5', s => { s.pierce += 1; s.pierceGr
 U('reflect', 2, 'L7,1,7,9;A1,3,6.5,5;A6.5,5,1,7.5', s => { s.reflect += 1; }, 'absorbed', 800);
 U('graze', 2, 'C4,5,2;L8,1,8,9;L6.2,3,6.2,3.6;L6.2,6.4,6.2,7', s => { s.graze += 1; }, 'grazes', 200);
 U('eraser', 2, 'C5,5,3.5;L2.5,2.5,7.5,7.5', s => { s.eraser += 1; }, 'absorbed', 2000);
-U('dichro', 2, 'C3.5,5,2.5;D6.8,5,2.5', s => { s.dichro += 1; s.oppMul += 0.25; }, 'flips', 800);
+U('dichro', 2, 'C3.5,5,2.5;D6.8,5,2.5', s => { s.dichro += 1; s.oppMul += 0.25; });
 U('harmony', 2, 'C3.8,5,2.8;C6.2,5,2.8', s => { s.sameMul += 0.6; }, 'absorbed', 1500);
 U('vamp', 2, 'P5,9,1.5,5,3,2,5,3.5,7,2,8.5,5', s => { s.vamp += 1; }, 'hits', 50);
 U('kinetic', 2, 'P6,2,9,5,6,8;L1,3.5,4,3.5;L1,5,5,5;L1,6.5,4,6.5', s => { s.kinetic += 1; }, 'rooms', 100);
@@ -161,7 +161,7 @@ function computeStats(ship, ups, extra) {
 const STAT_SHOW = [
   ['dmg', 'dmg', 1], ['rate', 'rate', 1], ['spd', 'vel', 1], ['life', 'range', 1], ['size', 'cal', 1],
   ['count', 'multi', 1], ['inacc', 'chaos', -1], ['maxHp', 'hp', 1], ['move', 'move', 1], ['hitR', 'small', -1],
-  ['gain', 'cap', 1], ['oppMul', 'contrast', 1], ['luck', 'lucky', 1], ['inv', 'shield', 1]
+  ['gain', 'cap', 1], ['oppMul', 'contrast', 1], ['sameMul', 'harmony', 1], ['luck', 'lucky', 1], ['inv', 'shield', 1]
 ];
 function statDeltas(a, b) {
   const out = [];

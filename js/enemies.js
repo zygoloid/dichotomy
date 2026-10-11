@@ -419,7 +419,7 @@ function makeEnemy(type, x, y, pol, spawnT) {
 }
 
 function damageEnemy(e, d, crit) {
-  if (e.dead || e.spawn > 0) return;
+  if (e.dead || e.spawn > 0 || d <= 0) return;
   e.hp -= d; e.fl = .08;
   if (crit) fxParts(e.x, e.y, '#ffffff', 4, 220);
   if (e.hp <= 0) killEnemy(e);
@@ -466,6 +466,7 @@ function updateEnemies(dt) {
   for (const e of R.enemies) {
     if (e.dead) continue;
     if (e.fl > 0) e.fl -= dt;
+    if (e.df > 0) e.df -= dt;
     if (e.spawn > 0) { e.spawn -= dt; continue; }
     let d = dt;
     if (e.slowT > 0) { e.slowT -= dt; d *= e.boss ? (1 + e.slowF) / 2 : e.slowF; }
@@ -496,10 +497,11 @@ function updateEnemies(dt) {
   R.enemies = R.enemies.filter(e => !e.dead);
 }
 
-function nearestEnemy(x, y, maxD, skip) {
+// avoid: skip enemies of this colour (used to steer shots away from targets they cannot hurt)
+function nearestEnemy(x, y, maxD, skip, avoid) {
   let best = null, bd = maxD * maxD;
   for (const e of R.enemies) {
-    if (e.dead || e.spawn > 0 || (skip && skip.has(e))) continue;
+    if (e.dead || e.spawn > 0 || e.pol === avoid || (skip && skip.has(e))) continue;
     const d = (e.x - x) * (e.x - x) + (e.y - y) * (e.y - y);
     if (d < bd) { bd = d; best = e; }
   }
