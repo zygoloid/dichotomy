@@ -14,8 +14,10 @@ function room(type) { return R.floor.rooms.find(r => r.type === type && !r.clear
 
 // 1. no upgrade is ever a no-op: on the base ship and on top of random builds
 let bad = 0;
-for (let trial = 0; trial < 40; trial++) {
-  const ship = SHIPS[trial % SHIPS.length], build = trial < 6 ? [] : Array.from({ length: 12 }, () => pick(UPS).id);
+for (let trial = 0; trial < 600; trial++) {
+  // builds are drawn without repeats, as in play
+  const ship = SHIPS[trial % SHIPS.length], pool = UPS.map(u => u.id), build = [];
+  for (let k = 0; trial >= 6 && k < 16; k++) build.push(pool.splice(randi(0, pool.length - 1), 1)[0]);
   const a = JSON.stringify(computeStats(ship, build));
   for (const u of UPS) if (!u.hidden && JSON.stringify(computeStats(ship, build, u.id)) === a) { bad++; console.log('NO-OP', u.id, 'on', ship.id, build.join(',')); }
 }

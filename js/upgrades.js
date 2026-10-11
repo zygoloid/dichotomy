@@ -163,8 +163,9 @@ function computeStats(ship, ups, extra) {
   for (const id of ups) UP[id].fn(s);
   if (extra) UP[extra].fn(s);
   s.maxHp = Math.max(1, Math.round(s.maxHp));
-  s.rate = clamp(s.rate, 0.5, 30);
-  s.life = Math.max(0.12, s.life);
+  // soft limits rather than hard clamps, so an upgrade to a stat at its limit still does something
+  s.rate = Math.max(0.5, s.rate > 20 ? 20 * Math.sqrt(s.rate / 20) : s.rate);
+  if (s.life < 0.25) s.life = 0.25 * Math.sqrt(s.life / 0.25);
   s.count = Math.min(s.count, 40);
   s.inv = Math.max(0.3, s.inv);
   s.hitR = clamp(s.hitR, 2, 14);
