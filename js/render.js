@@ -242,6 +242,11 @@ function drawShots(c) {
   c.globalCompositeOperation = 'lighter';
   for (const sh of R.shots) {
     const col = PAL.pc[sh.pol], cs = Math.cos(sh.ang), sn = Math.sin(sh.ang), l = sh.r * (sh.burst ? 3.2 : 2.4), w = sh.r * .8;
+    if (R.P.stats.crescent && !sh.burst) { // a wide blade of light instead of a dart
+      c.strokeStyle = rgba(col, .85); c.lineWidth = Math.max(2.5, sh.r * .3);
+      c.beginPath(); c.arc(sh.x - cs * sh.r * .9, sh.y - sn * sh.r * .9, sh.r * 1.35, sh.ang - .8, sh.ang + .8); c.stroke();
+      continue;
+    }
     c.fillStyle = rgba(col, sh.pol ? .75 : .6);
     c.beginPath();
     c.moveTo(sh.x + cs * l, sh.y + sn * l); c.lineTo(sh.x - sn * w, sh.y + cs * w);
@@ -303,6 +308,12 @@ function drawPlayer(c) {
     c.beginPath(); c.arc(P.x, P.y, s.absorbR + 5, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, chgFrac())); c.stroke();
   }
   if (P.lockT > 0) { c.strokeStyle = BAD; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 19, 0, TAU * P.lockT / s.flipLock); c.stroke(); }
+  if (P.rageT > 0) { c.strokeStyle = rgba(BAD, .5 + .3 * Math.sin(G.t * 20)); c.lineWidth = 2; polyPath(c, P.x, P.y, 22, 3, G.t * 5); c.stroke(); }
+  if (P.fcN > 0) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 17, 0, TAU * P.fcN / (3 * s.fcrit)); c.stroke(); }
+  if (s.chargeshot && P.cs > .05) { // the charge gathering at the nose
+    c.fillStyle = rgba(col, .35 + .5 * P.cs); c.beginPath(); c.arc(P.x + Math.cos(P.face) * 18, P.y + Math.sin(P.face) * 18, 3 + 7 * P.cs, 0, TAU); c.fill();
+    if (P.cs >= 1) { c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
+  }
   if (s.ghost && P.hist.length) {
     c.globalAlpha = .4; c.setLineDash([4, 4]);
     shipPath(c, R.ship.id, P.hist[0].x, P.hist[0].y, 12, P.face); c.strokeStyle = col; c.lineWidth = 2; c.stroke();
@@ -446,6 +457,11 @@ function drawWorld(c) {
     if (tr.pol === 0) pass('rgba(255,255,255,' + k * .7 + ')', tr.w * .4);
   }
   c.lineCap = 'butt';
+  for (let i = 0; i < R.webs.length; i += 5) {
+    const w = R.webs, mx = (w[i] + w[i + 2]) / 2 + rand(-7, 7), my = (w[i + 1] + w[i + 3]) / 2 + rand(-7, 7);
+    c.strokeStyle = rgba(PAL.pc[w[i + 4]], .55); c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(w[i], w[i + 1]); c.lineTo(mx, my); c.lineTo(w[i + 2], w[i + 3]); c.stroke();
+  }
   for (const a of R.arcs) {
     c.strokeStyle = rgba(PAL.pc[a.pol], 1 - a.t / .18); c.lineWidth = 2.5; c.beginPath(); c.moveTo(a.x0, a.y0);
     for (let i = 1; i < 5; i++) c.lineTo(lerp(a.x0, a.x1, i / 5) + rand(-12, 12), lerp(a.y0, a.y1, i / 5) + rand(-12, 12));
@@ -704,6 +720,7 @@ function render(c) {
     else if (G.state === 'dead' || G.state === 'win') drawEnd(c, G.state === 'win');
     for (const w of R.wells) src.push([1, w.x, w.y, w.vis || w.r * .22, .00016 * w.str]);
     for (const o of R.orbs) src.push([1, o.x, o.y, 55, .03]);
+    if (R.P.stats.repel) src.push([1, R.P.x, R.P.y, 70, -.006 * R.P.stats.repel]); // space bulges outward around the ship
     if (R.room.portal) src.push([1, R.room.portal.x, R.room.portal.y, 46, .02]);
     for (const f of R.fx) src.push([2, f.x, f.y, f.t * f.spd, f.str * (1 - f.t / f.life)]);
     if (R.P.stats.grav) for (let i = 0; i < R.shots.length && src.length < 12; i += 4) src.push([1, R.shots[i].x, R.shots[i].y, 18, .0015 * Math.min(3, R.P.stats.grav)]);

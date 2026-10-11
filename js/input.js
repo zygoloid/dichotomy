@@ -2,10 +2,11 @@
 const IN = {
   keys: {}, pressed: {}, mx: W / 2, my: H / 2, mb: [false, false, false], mhit: [false, false, false],
   canvas: null, any: false, mouseAim: false, mouseIdle: 0,
+  dash: null, tapT: {}, TAP: { KeyW: [0, -1], KeyA: [-1, 0], KeyS: [0, 1], KeyD: [1, 0] },
   padMove: { x: 0, y: 0 }, padAim: { x: 0, y: 0 }, padPrev: [],
   // Twin-stick pad: left stick moves, right stick aims and fires. Buttons are folded into
   // the same key codes the keyboard uses, so the rest of the game needs no pad logic.
-  PAD: { 0: ['Enter', 'KeyE'], 1: ['KeyQ'], 2: ['Space'], 3: ['KeyR'], 4: ['Space'], 5: ['KeyQ'], 6: ['Space'], 7: ['KeyQ'], 8: ['KeyX'], 9: ['Escape'], 12: ['ArrowUp'], 13: ['ArrowDown'], 14: ['ArrowLeft'], 15: ['ArrowRight'] },
+  PAD: { 0: ['Enter', 'KeyE'], 1: ['KeyQ'], 2: ['Space'], 3: ['KeyR'], 4: ['Space'], 5: ['KeyQ'], 6: ['Space'], 7: ['KeyQ'], 8: ['KeyX'], 9: ['Escape'], 10: ['Dash'], 12: ['ArrowUp'], 13: ['ArrowDown'], 14: ['ArrowLeft'], 15: ['ArrowRight'] },
   pollPad() {
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
     let p = null;
@@ -21,13 +22,19 @@ const IN = {
   },
   down(k) { return !!this.keys[k]; },
   hit(k) { return !!this.pressed[k]; },
-  end() { this.pressed = {}; this.mhit = [false, false, false]; this.any = false; },
+  end() { this.pressed = {}; this.mhit = [false, false, false]; this.any = false; this.dash = null; },
   init(canvas) {
     this.canvas = canvas;
     const block = { Space: 1, Tab: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1 };
     window.addEventListener('keydown', e => {
       if (block[e.code]) e.preventDefault();
-      if (!e.repeat) { this.pressed[e.code] = true; this.any = true; }
+      if (!e.repeat) {
+        this.pressed[e.code] = true; this.any = true;
+        if (this.TAP[e.code]) { // two presses of the same direction in quick succession
+          if (e.timeStamp - (this.tapT[e.code] || -1e9) < 260) this.dash = this.TAP[e.code];
+          this.tapT[e.code] = e.timeStamp;
+        }
+      }
       this.keys[e.code] = true;
     });
     window.addEventListener('keyup', e => { this.keys[e.code] = false; });

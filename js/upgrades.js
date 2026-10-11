@@ -11,6 +11,7 @@ function baseStats() {
     pierceGrow: 0, kinetic: 0, turret: 0, berserk: 0, oppMul: 2, sameMul: 0, // same-colour hits are deflected unless an upgrade says otherwise
     beam: 0, drone: 0, missile: 0, mine: 0, tesla: 0,
     bwave: 0, baegis: 0, bfocus: 0, bpolar: 0, deadman: 0, overflow: 0, dynamo: 0, flux: 0, vacuum: 0, trickle: 0, corona: 0,
+    fblink: 0, fcrit: 0, rage: 0, aftershock: 0, chargeshot: 0, dash: 0, crescent: 0, phase: 0, refract: 0, slip: 0, arcweb: 0, detonate: 0, repel: 0,
     spinup: 0, blade: 0, rail: 0, orb: 0, flak: 0, convert: 0, ghost: 0, flail: 0, swarm: 0, map: 0,
     // pilot
     maxHp: 4, move: 300, hitR: 5, absorbR: 26, magnet: 90, luck: 0, chargeMax: 100, rings: 1, gain: 1, burstN: 1,
@@ -82,6 +83,20 @@ U('vacuum', 2, 'P2,3,8,3,8,9,2,9;L4,1.5,6,1.5', s => { s.vacuum += 1; });
 U('overflow', 2, 'P2,4,8,4,8,9,2,9;A5,5,5,.8;L3,2.5,3,1.5;L7,2.5,7,1.5', s => { s.overflow += 1; }, 'absorbed', 500);
 U('corona', 2, 'C5,5,2;R5,5,4,0,50;R5,5,4,90,140;R5,5,4,180,230;R5,5,4,270,320', s => { s.corona += 1; }, 'absorbed', 900);
 U('bpolar', 2, 'C5,5,4;D3.5,5,1;C6.5,5,1', s => { s.bpolar += 1; }, 'absorbed', 1200);
+// --- triggered actions (on flip, on hit, on ceasing fire, on a double-tap) and shot behaviours
+U('dash', 0, 'L1,2,4,5,1,8;L4,2,7,5,4,8;D8.6,5,1.1', s => { s.dash += 1; });
+U('repel', 0, 'C5,5,2;A2.4,2.4,.6,.6;A7.6,2.4,9.4,.6;A2.4,7.6,.6,9.4;A7.6,7.6,9.4,9.4', s => { s.repel += 1; }, 'grazes', 300);
+U('slip', 0, 'C5,5,2.5;L1,5,2.5,5;A7.5,5,9.8,5;L3.6,5,4.3,5;L5.7,5,6.4,5', s => { s.slip += 1; }, 'kills', 1000);
+U('rage', 1, 'P5,9.5,1.5,6,3,3,5,4.5,7,3,8.5,6;L3.5,.5,5,2,6.5,.5', s => { s.rage += 1; });
+U('crescent', 1, 'R2,5,5,-55,55;R4.5,5,5,-55,55', s => { s.crescent += 1; s.size *= 2.2; s.dmg *= 0.85; s.life *= 0.9; });
+U('fblink', 1, 'C2.8,6.5,2;D7.2,3.5,2;L4.5,5.5,5.5,4.8', s => { s.fblink += 1; }, 'flips', 100);
+U('fcrit', 1, 'C5,5,3.5;F5,1.5,5,8.5,3.3,8,2,6.6,1.5,5,2,3.4,3.3,2;L5,.2,5,1;L5,9,5,9.8;L.2,5,1,5;L9,5,9.8,5', s => { s.fcrit += 1; }, 'flips', 250);
+U('aftershock', 1, 'P1,3,3,5,1,7;C7,5,1.2;C7,5,2.8', s => { s.aftershock += 1; }, 'kills', 350);
+U('phase', 1, 'P5,1,7,1,7,9,5,9;L1,5,4,5;A8,5,9.8,5', s => { s.phase += 1; s.dmg *= 0.9; }, 'rooms', 80);
+U('detonate', 1, 'P5,1,6,4,9,5,6,6,5,9,4,6,1,5,4,4;D2,2,.7;D8,2,.7;D2,8,.7;D8,8,.7', s => { s.detonate += 1; }, 'bursts', 50);
+U('chargeshot', 2, 'C4,5,3.2;C4,5,1.8;D4,5,.8;A7.2,5,9.8,5', s => { s.chargeshot += 1; });
+U('refract', 2, 'A1,5,4,5;P4.5,2.5,6.5,5,4.5,7.5;L6.5,5,9,3;L6.5,5,9,7', s => { s.refract += 1; s.dmg *= 0.8; }, 'flips', 600);
+U('arcweb', 2, 'D2,2,1;D8,3,1;D4,8,1;L2,2,5,3.5,8,3;L8,3,5.5,5,6.5,6.5,4,8;L4,8,2.5,5,2,2', s => { s.arcweb += 1; }, 'bosses', 4);
 U('compass', 0, 'C5,5,4;F5,1.8,6.3,5,5,8.2,3.7,5', s => { s.map += 1; s.luck += 1; }, 'rooms', 150);
 U('blade', 1, 'R1.5,8.5,7,280,350;R1.5,8.5,4.5,280,350;L1.5,8.5,4,6', s => { s.blade += 1; });
 U('spinup', 1, 'R5,4.5,3.3,0,300;L5,4.5,7.4,2.4;L1,9,3,9;L4,9,6.5,9;L7.5,9,9,9', s => { s.spinup += 1; });

@@ -25,6 +25,7 @@ function shotDmg() {
   d *= 1 + .06 * Math.min(P.chain, 8); // chain overdrive
   if (s.dynamo) d *= 1 + .8 * s.dynamo * chgFrac();
   if (s.vacuum) d *= 1 + .6 * s.vacuum * Math.max(0, 1 - chgFrac());
+  if (P.fcN > 0) d *= 2; // polar charge: the volleys right after a flip
   return Math.max(1, d);
 }
 
@@ -44,12 +45,14 @@ function spawnShot(x, y, ang, o) {
 }
 
 function fireVolley(ang) {
-  const P = R.P, s = P.stats, d = shotDmg(), rad = Math.PI / 180;
+  // charged shot: whatever built up while the trigger was released goes into this volley
+  const P = R.P, s = P.stats, cs = s.chargeshot ? P.cs : 0, d = shotDmg() * (1 + 3 * s.chargeshot * cs), rad = Math.PI / 180;
+  P.cs = 0; if (P.fcN > 0) P.fcN--;
   let ox = P.x, oy = P.y, dm = 1; // origin and damage scale: the afterimage replays the pattern from elsewhere
   const emit = a => {
     a += rand(-s.inacc, s.inacc) * rad;
     const pol = s.dichro && (P.dn++ & 1) ? P.pol ^ 1 : P.pol;
-    spawnShot(ox + Math.cos(a) * 12, oy + Math.sin(a) * 12, a, { dmg: d * dm, pol });
+    spawnShot(ox + Math.cos(a) * 12, oy + Math.sin(a) * 12, a, { dmg: d * dm, pol, size: 1 + cs });
     if (dm === 1 && s.echo && chance(Math.min(.9, s.echo))) P.vq.push({ t: .12, a, one: true });
   };
   const n = s.count;
@@ -88,11 +91,24 @@ function updateFire(dt) {
   }
   P.fireCd -= dt; P.bladeCd -= dt;
   P.heat = clamp(P.heat + (P.firing ? dt / 2 : -dt * 2), 0, 1);
+  P.shockCd -= dt;
+  if (P.firing) P.fireHeld += dt;
+  else {
+    // aftershock: letting go after sustained fire throws out a ring
+    if (s.aftershock && P.fireHeld > .6 && P.shockCd <= 0) {
+      P.shockCd = .8;
+      for (let i = 0, n = 6 + 6 * s.aftershock; i < n; i++) spawnShot(P.x, P.y, P.ang + i * TAU / n, { dmg: shotDmg() * .8, pol: P.pol });
+      fxRing(P.x, P.y, .02, 400, .3);
+    }
+    P.fireHeld = 0;
+    if (s.chargeshot) P.cs = Math.min(1, P.cs + dt / 1.2);
+  }
   if (P.rateBuff > 0) P.rateBuff -= dt;
   if (!P.firing || P.fireCd > 0) return;
   let rate = s.rate;
   if (s.turret) rate *= 1 + s.turret * (P.still > .25 ? .5 : -.15);
   if (P.rateBuff > 0) rate *= 1.3;
+  if (P.rageT > 0) rate *= 1 + .8 * s.rage;
   if (s.spinup) rate *= 1 + s.spinup * (-.4 + 1.7 * P.heat);
   P.fireCd = (1 + .7 * s.volley) / Math.max(.3, rate);
   fireVolley(P.ang);
@@ -173,10 +189,14 @@ function releaseBurst() {
   const P = R.P, s = P.stats, c = Math.min(chg(), s.chargeMax), f = c / s.chargeMax;
   if (c < 20) { AU.sfx('deny'); return false; }
   const n = Math.max(2, Math.round(c / 100 * 12 * s.burstN)), d = shotDmg() * 1.6 * s.burstDmg * (1 + .25 * s.bfocus);
+  if (s.detonate) for (const sh of R.shots) { // every shot in flight goes off where it is
+    if (sh.dead) continue;
+    explodeAt(sh.x, sh.y, 55, sh.dmg * 1.5 * s.detonate, null, sh.pol); sh.dead = true;
+  }
   for (let i = 0; i < n; i++) {
     // focus turns the ring into a forward cone
     const a = s.bfocus ? P.ang + (n > 1 ? i / (n - 1) - .5 : 0) * .8 : P.ang + i * TAU / n;
-    spawnShot(P.x, P.y, a, { dmg: d, pol: P.pol, hom: 7, spd: 520, life: Math.max(2.2, s.life), size: 1.5, burst: true, proj: true });
+    spawnShot(P.x, P.y, a, { dmg: d, pol: P.pol, hom: 7, spd: 520, life: Math.max(2.2, s.life), size: 1.5, burst: true, proj: true, ex: 45 * s.detonate });
   }
   if (s.bwave) {
     // shockwave: the classic bomb, wiping bullets and shoving enemies back
@@ -228,6 +248,7 @@ function hitEnemy(sh, e) {
   const base = d, m = polMul(sh.pol, e);
   if (m <= 0) {
     // wrong colour: the shot glances off and none of its effects apply
+    if (s.slip) { (sh.hit || (sh.hit = new Set())).add(e); return; } // slips straight through instead
     e.df = .14; fxParts(sh.x, sh.y, PAL.pc[e.pol], 2, 120); AU.sfx('tink');
     if (sh.pierce > 0) { sh.pierce--; (sh.hit || (sh.hit = new Set())).add(e); } else killShot(sh);
     return;
@@ -252,7 +273,9 @@ function hitEnemy(sh, e) {
   }
   if (sh.split > 0) for (const k of [-.5, .5])
     spawnShot(sh.x, sh.y, sh.ang + k, { dmg: sh.dmg * .55, pol: sh.pol, split: sh.split - 1, skip: e, size: .8, proj: !sh.beam });
-  if (sh.pierce > 0) { sh.pierce--; (sh.hit || (sh.hit = new Set())).add(e); sh.dmg *= 1 + s.pierceGrow; }
+  if (s.refract) { // carries on in the other colour, so it can only hurt each enemy once
+    sh.pol ^= 1; (sh.hit || (sh.hit = new Set())).add(e); sh.dmg *= .85 * (1 + s.pierceGrow);
+  } else if (sh.pierce > 0) { sh.pierce--; (sh.hit || (sh.hit = new Set())).add(e); sh.dmg *= 1 + s.pierceGrow; }
   else killShot(sh);
 }
 
@@ -292,8 +315,8 @@ function stepShot(sh, dt, scan) {
   if (sh.x < BX0) { nx = 1; sh.x = BX0; } else if (sh.x > BX1) { nx = -1; sh.x = BX1; }
   if (sh.y < BY0) { ny = 1; sh.y = BY0; } else if (sh.y > BY1) { ny = -1; sh.y = BY1; }
   if ((nx || ny) && R.room.hidden) hitSecret(sh);
-  if (!nx && !ny) for (const o of R.room.obs) { const h = circRect(sh.x, sh.y, sh.r, o); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; break; } }
-  if (!nx && !ny) for (const g of R.room.gates) if (g.pol !== sh.pol) { const h = circRect(sh.x, sh.y, sh.r, g); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; break; } }
+  if (!nx && !ny && !s.phase) for (const o of R.room.obs) { const h = circRect(sh.x, sh.y, sh.r, o); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; break; } }
+  if (!nx && !ny && !s.phase) for (const g of R.room.gates) if (g.pol !== sh.pol) { const h = circRect(sh.x, sh.y, sh.r, g); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; break; } }
   if (nx || ny) {
     if (sh.bounce <= 0) { killShot(sh); return; }
     sh.bounce--;
@@ -340,6 +363,19 @@ function updateShots(dt) {
     if (R.trails.length < 160) R.trails.push({ pts, pol: sh.pol, w: Math.max(2, sh.r * .8), t: 0 });
   }
   if (R.shots.some(q => q.dead)) R.shots = R.shots.filter(q => !q.dead);
+
+  // arc web: lightning strung between neighbouring shots (and the tips of fresh beams)
+  R.webs = [];
+  if (s.arcweb) {
+    const nodes = R.shots.map(q => q).concat(R.trails.map(tr => ({ x: tr.pts[tr.pts.length - 2], y: tr.pts[tr.pts.length - 1], pol: tr.pol })));
+    const reach = 150 * Math.sqrt(s.arcweb), dmg = s.dmg * 1.5 * s.arcweb * dt;
+    for (let i = 0; i < nodes.length && R.webs.length < 240; i++) for (let j = i + 1; j <= i + 2 && j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j];
+      if (hyp(a.x - b.x, a.y - b.y) > reach) continue;
+      R.webs.push(a.x, a.y, b.x, b.y, a.pol);
+      for (const e of R.enemies) if (!e.dead && e.spawn <= 0 && segDist(e.x, e.y, a.x, a.y, b.x, b.y) < e.r + 5) damageEnemy(e, dmg * polMul(a.pol, e));
+    }
+  }
 
   // orbitals: block any bullet, grind anything they touch
   if (s.orbit) {

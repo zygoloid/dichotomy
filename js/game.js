@@ -22,7 +22,7 @@ function newRun() {
   const ship = SHIPS.find(s => s.id === META.ship && (s.id === 'tri' || META.un['ship:' + s.id])) || SHIPS[0];
   R = {
     ship, asc: Math.min(META.asc || 0, maxAsc()), stage: 0, time: 0, beat: 0, lastStep: -1, slowT: 0,
-    shots: [], bullets: [], enemies: [], pickups: [], parts: [], fx: [], arcs: [], booms: [], wells: [], mines: [], trails: [], orbs: [], slashes: [], bossMax: 1,
+    shots: [], bullets: [], enemies: [], pickups: [], parts: [], fx: [], arcs: [], booms: [], wells: [], mines: [], trails: [], orbs: [], slashes: [], webs: [], bossMax: 1,
     offered: new Set(), killCam: 0, rerollCost: 3,
     shake: 0, inv: 0, ca: 0, flash: 0, eid: 0, shotN: 0, wave: 0, flipRule: false, lastFlipBeat: 0, over: false,
     nStages: 3 + (META.un.stage4 ? 1 : 0) + (META.un.stage5 ? 1 : 0) + (META.un.stage5 && META.un.stage6 ? 1 : 0),
@@ -31,7 +31,7 @@ function newRun() {
   };
   R.P = {
     x: W / 2, y: H / 2, vx: 0, vy: 0, kx: 0, ky: 0, pol: 0, ups: [], hp: 1, sh: 0, charge: 0, inv: 0, fireCd: 0, vq: [],
-    novaCd: 0, lockT: 0, ang: -Math.PI / 2, face: -Math.PI / 2, still: 0, drones: [], misCd: 1, mineCd: 0, teslaCd: 0, orbCd: 2, bladeCd: 0, heat: 0, railN: 0, hist: [], fl: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, shards: 0, refl: 0, vampN: 0, ofl: 0, seqPol: -1, seqN: 0, chain: 0, preview: null,
+    novaCd: 0, lockT: 0, ang: -Math.PI / 2, face: -Math.PI / 2, still: 0, drones: [], misCd: 1, mineCd: 0, teslaCd: 0, orbCd: 2, bladeCd: 0, heat: 0, railN: 0, hist: [], fl: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, shards: 0, refl: 0, vampN: 0, ofl: 0, blinkCd: 0, fcN: 0, rageT: 0, cs: 0, dashCd: 0, fireHeld: 0, shockCd: 0, seqPol: -1, seqN: 0, chain: 0, preview: null,
     stats: null, rateBuff: 0, hit: false, firing: false, dn: 0
   };
   const P = R.P;
@@ -168,6 +168,7 @@ function hurtPlayer() {
   }
   if (P.sh > 0) P.sh--; else P.hp--;
   P.inv = s.inv; P.hit = true; P.chain = 0; P.seqN = 0;
+  if (s.rage) P.rageT = 6;
   mAdd('hits');
   R.ca = .03; R.flash = 1; fxShake(16); G.hitstop = .07; fxRing(P.x, P.y, .1, 800, .7); AU.sfx('hurt');
   for (const b of R.bullets) if (hyp(b.x - P.x, b.y - P.y) < 150) { b.dead = true; fxParts(b.x, b.y, PAL.pc[b.pol], 1, 120); }
@@ -184,6 +185,15 @@ function flipPolarity() {
   P.pol ^= 1; P.lockT = s.flipLock;
   R.st.flips = (R.st.flips || 0) + 1; mAdd('flips');
   AU.sfx('flip', P.pol); fxRing(P.x, P.y, .018, 420, .3);
+  if (s.fcrit) P.fcN = 3 * s.fcrit;
+  if (s.fblink && P.blinkCd <= 0) {
+    // phase step: a short hop in the direction of travel, untouchable for a moment
+    const v = hyp(P.vx, P.vy);
+    P.blinkCd = 1.5; P.inv = Math.max(P.inv, .3 * s.fblink);
+    fxParts(P.x, P.y, PAL.pc[P.pol], 14, 220);
+    if (v > 40) { P.x = clamp(P.x + P.vx / v * 90, BX0 + 14, BX1 - 14); P.y = clamp(P.y + P.vy / v * 90, BY0 + 14, BY1 - 14); }
+    fxRing(P.x, P.y, .03, 380, .3);
+  }
   if (s.nova && P.novaCd <= 0) {
     P.novaCd = 1.5;
     for (let i = 0, n = 8 * s.nova; i < n; i++) spawnShot(P.x, P.y, P.ang + i * TAU / n, { dmg: shotDmg() * .6, pol: P.pol });
@@ -223,6 +233,12 @@ function updatePlayer(dt) {
   const mv = s.move * (1 + .25 * s.flux * chgFrac());
   P.vx = lerp(P.vx, mx / l * mv, k); P.vy = lerp(P.vy, my / l * mv, k);
   if (s.trickle) addCharge(3 * s.trickle * dt);
+  // dash: double-tap a direction (or click the left stick) for a burst of speed through anything
+  const dd = IN.dash || (IN.hit('Dash') && (mx || my) ? [mx / Math.max(1e-6, hyp(mx, my)), my / Math.max(1e-6, hyp(mx, my))] : null);
+  if (s.dash && dd && P.dashCd <= 0) {
+    P.dashCd = 1.3 / s.dash; P.kx += dd[0] * 950; P.ky += dd[1] * 950; P.inv = Math.max(P.inv, .25);
+    fxParts(P.x, P.y, PAL.pc[P.pol], 12, 200); fxRing(P.x, P.y, .02, 360, .25); AU.sfx('flip', 1);
+  }
   const kd = Math.exp(-dt * 6); P.kx *= kd; P.ky *= kd;
   let px = 0, py = 0;
   for (const w of R.wells) {
@@ -259,6 +275,7 @@ function updatePlayer(dt) {
   P.face = turnTo(P.face, P.firing ? P.ang : (mx || my) ? Math.atan2(my, mx) : P.face, 14 * dt);
 
   if (P.inv > 0) P.inv -= dt;
+  P.blinkCd -= dt; P.dashCd -= dt; if (P.rageT > 0) P.rageT -= dt;
   if (P.lockT > 0) P.lockT -= dt;
   if (P.novaCd > 0) P.novaCd -= dt;
   if (IN.hit('Space') || IN.mhit[2]) flipPolarity();
@@ -301,6 +318,9 @@ function updateBullets(dt) {
     for (const g of R.room.gates) if (g.pol !== b.pol && b.x > g.x && b.x < g.x + g.w && b.y > g.y && b.y < g.y + g.h) { b.dead = true; fxParts(b.x, b.y, PAL.pc[g.pol], 1, 80); break; }
     if (b.dead) continue;
     const dx = b.x - P.x, dy = b.y - P.y, d2 = dx * dx + dy * dy;
+    if (s.repel && b.pol !== P.pol && d2 < 130 * 130 && d2 > 1) { // a gentle shove: it bends paths, it does not stop them
+      const d = Math.sqrt(d2), f = 260 * s.repel * (1 - d / 130) * dt; b.vx += dx / d * f; b.vy += dy / d * f;
+    }
     if (b.pol === P.pol) { if (d2 < (aR + b.r) * (aR + b.r)) absorbBullet(b); }
     else if (d2 < (hR + b.r * .6) * (hR + b.r * .6)) { b.dead = true; hurtPlayer(); }
     else if (!b.gz && d2 < (hR + b.r + 20) * (hR + b.r + 20) && P.inv <= 0) {
