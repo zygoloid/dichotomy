@@ -414,7 +414,7 @@ function update(dt) {
   R.time += dt;
   R.beat = R.time * PAL.bpm / 60;
   const step = Math.floor(R.beat * 4);
-  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.some(e => !e.dummy) ? 1 : 0); }
+  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.some(e => !e.dummy) ? 1 : 0, PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }
 
   // the room's current: reverses every 16 beats unless a boss is steering it
   const fl = R.room.flow;
@@ -468,6 +468,11 @@ function frame(dt) {
   G.t += dt;
   if (IN.any) AU.init();
   if (IN.hit('KeyM')) { AU.mute = META.mute = !AU.mute; saveMeta(); }
+  if (G.state === 'title' || G.state === 'gallery') {
+    // menu music: the first song at its calmest
+    const b = G.t * 116 / 15, st = Math.floor(b);
+    if (st !== G.mstep) { G.mstep = st; AU.step(st, 0, 0, 116, (b - st) * 15 / 116); }
+  }
   switch (G.state) {
     case 'title': updateTitle(); break;
     case 'play':

@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- Offline render of the soundtrack: reports levels for every song at every intensity.
+     Run with:  node tools/audio_test.js   (drives headless Chrome and prints the report) -->
+<meta charset="utf-8"><pre id="out">rendering...</pre>
+<script>const META = { vol: 1 };</script>
+<script src="../js/util.js"></script>
+<script src="../js/audio.js"></script>
+<script>
+window.result = (async () => {
+  const out = [], bpms = [120, 128, 100, 140, 150], sr = 22050;
+  try {
+    for (let mus = 0; mus < 5; mus++) for (let level = 0; level < 3; level++) {
+      const sd = 15 / bpms[mus], steps = 16 * 16, len = Math.ceil((steps * sd + 1) * sr);
+      const ctx = new OfflineAudioContext(1, len, sr);
+      AU.setup(ctx); AU.out.disconnect(); AU.out.connect(ctx.destination); // bypass the compressor to see raw levels
+      for (let i = 0; i < steps; i++) AU.step(i, mus, level, bpms[mus], 0, .05 + i * sd);
+      const d = (await ctx.startRendering()).getChannelData(0);
+      let peak = 0, sq = 0, bad = 0, lowSq = 0, lp = 0;
+      const a = 1 - Math.exp(-2 * Math.PI * 150 / sr);
+      for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) bad++; peak = Math.max(peak, Math.abs(v)); sq += v * v; lp += a * (v - lp); lowSq += lp * lp; }
+      // loudness per 2-bar block, to see the arrangement breathe
+      const blk = Math.floor(32 * sd * sr), env = [];
+      for (let b = 0; b < 8; b++) { let e = 0; for (let i = b * blk; i < (b + 1) * blk; i++) e += d[i] * d[i]; env.push(Math.sqrt(e / blk).toFixed(2)); }
+      out.push(`song ${mus} level ${level}: peak ${peak.toFixed(2)} rms ${Math.sqrt(sq / d.length).toFixed(3)} sub-150Hz share ${(lowSq / sq * 100).toFixed(0)}% bad ${bad} | 2-bar rms ${env.join(' ')}`);
+    }
+  } catch (e) { out.push('ERROR ' + e.stack); }
+  document.getElementById('out').textContent = out.join('\n');
+  return out.join('\n');
+})();
+</script>
