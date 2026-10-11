@@ -1,30 +1,44 @@
 <!doctype html>
-<!-- Offline render of the soundtrack: reports levels for every song at every intensity.
-     Run with:  node tools/audio_test.js   (drives headless Chrome and prints the report) -->
+<!-- Offline render of the soundtrack. Run with:  node tools/audio_test.js [--wav DIR]
+     Prints level statistics for every song at every intensity; with --wav it also writes a
+     preview of each song (8 bars calm, 16 bars combat, 16 bars boss). -->
 <meta charset="utf-8"><pre id="out">rendering...</pre>
 <script>const META = { vol: 1 };</script>
 <script src="../js/util.js"></script>
 <script src="../js/audio.js"></script>
 <script>
-window.result = (async () => {
-  const out = [], bpms = [120, 128, 100, 140, 150], sr = 22050;
-  try {
-    for (let mus = 0; mus < 5; mus++) for (let level = 0; level < 3; level++) {
-      const sd = 15 / bpms[mus], steps = 16 * 16, len = Math.ceil((steps * sd + 1) * sr);
-      const ctx = new OfflineAudioContext(1, len, sr);
-      AU.setup(ctx); AU.out.disconnect(); AU.out.connect(ctx.destination); // bypass the compressor to see raw levels
-      for (let i = 0; i < steps; i++) AU.step(i, mus, level, bpms[mus], 0, .05 + i * sd);
-      const d = (await ctx.startRendering()).getChannelData(0);
-      let peak = 0, sq = 0, bad = 0, lowSq = 0, lp = 0;
-      const a = 1 - Math.exp(-2 * Math.PI * 150 / sr);
-      for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) bad++; peak = Math.max(peak, Math.abs(v)); sq += v * v; lp += a * (v - lp); lowSq += lp * lp; }
-      // loudness per 2-bar block, to see the arrangement breathe
-      const blk = Math.floor(32 * sd * sr), env = [];
-      for (let b = 0; b < 8; b++) { let e = 0; for (let i = b * blk; i < (b + 1) * blk; i++) e += d[i] * d[i]; env.push(Math.sqrt(e / blk).toFixed(2)); }
-      out.push(`song ${mus} level ${level}: peak ${peak.toFixed(2)} rms ${Math.sqrt(sq / d.length).toFixed(3)} sub-150Hz share ${(lowSq / sq * 100).toFixed(0)}% bad ${bad} | 2-bar rms ${env.join(' ')}`);
-    }
-  } catch (e) { out.push('ERROR ' + e.stack); }
-  document.getElementById('out').textContent = out.join('\n');
+const BPM = [126, 132, 124, 138, 140];
+async function render(mus, plan, sr, raw) {
+  const sd = 15 / BPM[mus], steps = plan.reduce((a, p) => a + p[1] * 16, 0), ctx = new OfflineAudioContext(1, Math.ceil((steps * sd + 2) * sr), sr);
+  AU.setup(ctx);
+  if (raw) { AU.out.disconnect(); AU.out.connect(ctx.destination); } // bypass the compressor to see raw levels
+  let i = 0;
+  for (const [level, bars] of plan) for (let k = 0; k < bars * 16; k++, i++) AU.step(i, mus, level, BPM[mus], 0, .05 + i * sd);
+  return (await ctx.startRendering()).getChannelData(0);
+}
+window.stats = async () => {
+  const out = [], sr = 22050;
+  for (let mus = 0; mus < 5; mus++) for (let level = 0; level < 3; level++) {
+    const d = await render(mus, [[level, 16]], sr, true);
+    let peak = 0, sq = 0, bad = 0, lowSq = 0, lp = 0, hiSq = 0, hp = 0;
+    const a = 1 - Math.exp(-2 * Math.PI * 150 / sr), b = 1 - Math.exp(-2 * Math.PI * 2000 / sr);
+    for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) bad++; peak = Math.max(peak, Math.abs(v)); sq += v * v; lp += a * (v - lp); lowSq += lp * lp; hp += b * (v - hp); hiSq += (v - hp) * (v - hp); }
+    const blk = Math.floor(32 * 15 / BPM[mus] * sr), env = [];
+    for (let k = 0; k < 8; k++) { let e = 0; for (let i = k * blk; i < (k + 1) * blk; i++) e += d[i] * d[i]; env.push(Math.sqrt(e / blk).toFixed(3)); }
+    out.push('song ' + mus + ' level ' + level + ': peak ' + peak.toFixed(2) + ' rms ' + Math.sqrt(sq / d.length).toFixed(3) + ' <150Hz ' + (lowSq / sq * 100).toFixed(0) + '% >2kHz ' + (hiSq / sq * 100).toFixed(0) + '% bad ' + bad + ' | 2-bar rms ' + env.join(' '));
+  }
   return out.join('\n');
-})();
+};
+// 16-bit mono WAV as base64
+window.wav = async mus => {
+  const sr = 32000, d = await render(mus, [[0, 8], [1, 16], [2, 16]], sr, false), n = d.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i] * 1.6)) * 32767, true);
+  let bin = ''; const u = new Uint8Array(buf);
+  for (let i = 0; i < u.length; i += 8192) bin += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
+  return btoa(bin);
+};
+window.ready = true;
 </script>

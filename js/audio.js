@@ -63,41 +63,80 @@ const AU = {
   },
 
   // ------------------------------------------------------------ music
-  // Five songs (floor themes pick one by index). Each has its own key, mode, chord loop,
-  // bassline, arpeggio and timbres. scale = semitone offsets; prog = scale degrees, two bars
-  // per chord; bass/arp are 16-step patterns (-1 = rest; bass in scale steps above the chord
-  // root, arp as chord-tone index 0-3).
+  // Five songs, each in its own sub-genre; floor themes pick one by index (tempo comes from
+  // the theme). All patterns are 16 steps of sixteenth notes.
+  //   scale  semitone offsets          prog  chord roots as scale degrees, cb bars each
+  //   bass   scale steps above the chord root, -1 rest
+  //   acid   optional 303-style line (with acc = accents, sl = slides into the note)
+  //   gate   rhythm that chops the supersaw chord (the "trance gate"), 0..1 per step
+  //   arp    pluck line, scale steps above the chord root
+  //   leadA/leadB  melody (B on every fourth bar): scale steps above the chord root, -1 rest, -2 tie
   MUS: [
-    { root: 55, scale: [0, 2, 3, 5, 7, 8, 10], prog: [0, 5, 3, 4], arpW: 'square', bassW: 'sawtooth',
-      bass: [-1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, 0], arp: [0, -1, 2, -1, 1, -1, 2, -1, 3, -1, 2, -1, 1, -1, 2, -1] },
-    { root: 49, scale: [0, 2, 3, 5, 7, 9, 10], prog: [0, 3, 5, 4], arpW: 'sawtooth', bassW: 'square',
-      bass: [0, -1, 0, 0, -1, 0, 0, -1, 0, -1, 0, 0, -1, 0, 7, 0], arp: [0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 2, 1, 0, 1, 2, 3] },
-    { root: 41.2, scale: [0, 2, 3, 5, 7, 8, 10], prog: [0, 0, 5, 6], arpW: 'triangle', bassW: 'sawtooth',
-      bass: [0, -1, -1, -1, -1, -1, -1, 0, -1, -1, 0, -1, -1, -1, -1, -1], arp: [0, -1, -1, 2, -1, -1, 1, -1, -1, 3, -1, -1, 2, -1, 1, -1] },
-    { root: 46.25, scale: [0, 1, 3, 5, 7, 8, 10], prog: [0, 1, 0, 6], arpW: 'square', bassW: 'sawtooth',
-      bass: [0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 7, 7], arp: [3, -1, 3, 2, -1, 3, -1, 1, 3, -1, 3, 2, -1, 0, -1, 1] },
-    { root: 51.9, scale: [0, 2, 3, 5, 7, 8, 11], prog: [0, 5, 6, 4], arpW: 'sawtooth', bassW: 'sawtooth',
-      bass: [0, 0, 7, 0, 2, 0, 7, 0, 0, 4, 7, 0, 2, 0, 7, 4], arp: [0, 2, 1, 3, 0, 2, 1, 3, 2, 3, 1, 2, 0, 3, 2, 1] }
+    { // progressive trance, A minor: i-VI-III-VII, offbeat bass, 3-3-2 plucks
+      root: 55, scale: [0, 2, 3, 5, 7, 8, 10], prog: [0, 5, 2, 6], cb: 2, bassW: 'sawtooth', bassLen: 1.6, bassCut: 420, arpW: 'sawtooth',
+      bass: [-1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, 0],
+      gate: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1],
+      arp: [7, -1, -1, 4, -1, -1, 2, -1, 7, -1, -1, 4, -1, -1, 9, -1],
+      leadA: [4, -2, -2, 4, -2, 2, -2, -1, 4, -2, -2, 7, -2, -2, 4, -2],
+      leadB: [4, -2, -2, 4, -2, 2, -2, -1, 0, -2, 2, -2, 4, -2, 6, -2] },
+    { // acid techno, G phrygian: one chord with a flat-second turn, squelching 303 line
+      root: 49, scale: [0, 1, 3, 5, 7, 8, 10], prog: [0, 0, 0, 1], cb: 2, bassW: 'sawtooth', bassLen: 1.4, bassCut: 200, arpW: 'square',
+      bass: [-1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1],
+      acid: [0, -1, 0, 7, -1, 0, 3, -1, 0, 0, -1, 7, 0, -1, 10, 7],
+      acc: [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0], sl: [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1],
+      gate: [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+      leadB: [7, -1, -1, 7, -1, -1, 6, -2, -2, -2, -1, -1, -1, -1, -1, -1] },
+    { // dark techno, E minor: rumbling sixteenths, lone stabs into the reverb, slow eerie lead
+      root: 41.2, scale: [0, 2, 3, 5, 7, 8, 10], prog: [0, 0, 6, 0], cb: 2, bassW: 'sawtooth', bassLen: .8, bassCut: 170, arpW: 'triangle',
+      bass: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0],
+      gate: [0, 0, 0, .6, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+      arp: [-1, -1, 7, -1, -1, 7, -1, -1, 9, -1, -1, 7, -1, -1, -1, -1],
+      leadA: [4, -2, -2, -2, -2, -2, -2, -2, 3, -2, -2, -2, -2, -2, -2, -1],
+      leadB: [7, -2, -2, -2, -2, -2, -2, -2, 6, -2, -2, -2, 4, -2, -2, -1] },
+    { // uplifting trance, F# minor: VI-VII-i-i, rolling bass, full gate, soaring lead
+      root: 46.25, scale: [0, 2, 3, 5, 7, 8, 10], prog: [5, 6, 0, 0], cb: 2, bassW: 'sawtooth', bassLen: .9, bassCut: 380, arpW: 'sawtooth',
+      bass: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 7],
+      gate: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1],
+      arp: [0, 2, 4, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 4, 7],
+      leadA: [7, -2, -2, 6, -2, -2, 4, -2, 2, -2, -2, 4, -2, -2, -2, -1],
+      leadB: [7, -2, -2, 6, -2, -2, 4, -2, 9, -2, -2, 7, -2, 6, 4, -2] },
+    { // psy / hard trance, G# phrygian dominant: galloping bass, stepwise goa runs
+      root: 51.9, scale: [0, 1, 4, 5, 7, 8, 10], prog: [0, 0, 1, 0], cb: 2, bassW: 'square', bassLen: .8, bassCut: 500, arpW: 'sawtooth',
+      bass: [-1, -1, 0, 0, -1, 0, 0, 7, -1, -1, 0, 0, -1, 0, 7, 0],
+      gate: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0],
+      arp: [0, 1, 2, 4, 2, 1, 0, 1, 4, 5, 4, 2, 1, 2, 0, -1],
+      leadA: [7, -2, 8, 7, -1, 5, 4, -2, 7, -2, 8, 9, -2, 8, 7, -2],
+      leadB: [11, -2, 9, 8, -2, 7, -1, 5, 7, -2, 8, 7, -2, 5, 4, -2] }
   ],
   initMusic() {
     const c = this.ctx;
     this.mg = c.createGain(); this.mg.gain.value = .85; this.mg.connect(this.out);
     // everything tonal runs through "duck", which the kick pulls down for the sidechain pump
     this.duck = c.createGain(); this.duck.connect(this.mg);
+    // tempo-synced feedback delay
     this.dly = c.createDelay(1.5); this.dly.delayTime.value = .3;
     const fb = c.createGain(), wet = c.createGain(), lp = c.createBiquadFilter();
-    fb.gain.value = .4; wet.gain.value = .45; lp.type = 'lowpass'; lp.frequency.value = 2800;
+    fb.gain.value = .42; wet.gain.value = .4; lp.type = 'lowpass'; lp.frequency.value = 3000;
     this.dly.connect(lp); lp.connect(fb); fb.connect(this.dly); lp.connect(wet); wet.connect(this.duck);
+    // reverb: convolution with a generated decaying-noise impulse
+    const len = Math.floor(c.sampleRate * 2), ir = c.createBuffer(2, len, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let k = 0; k < len; k++) d[k] = (Math.random() * 2 - 1) * Math.pow(1 - k / len, 3.5); }
+    this.rev = c.createGain(); this.rev.gain.value = .5;
+    const cv = c.createConvolver(), rw = c.createGain(), hp = c.createBiquadFilter();
+    cv.buffer = ir; rw.gain.value = .55; hp.type = 'highpass'; hp.frequency.value = 350;
+    this.rev.connect(hp); hp.connect(cv); cv.connect(rw); rw.connect(this.mg);
+    this.lastAcid = 0;
   },
-  // one enveloped oscillator -> optional lowpass -> dest
+  // one enveloped oscillator -> optional lowpass -> dest (+ optional delay / reverb sends)
   voice(type, f, t, dur, vol, dest, o) {
     const c = this.ctx, osc = c.createOscillator(), g = c.createGain();
     o = o || {};
-    osc.type = type; osc.frequency.setValueAtTime(f, t);
+    osc.type = type;
+    if (o.from) { osc.frequency.setValueAtTime(o.from, t); osc.frequency.exponentialRampToValueAtTime(f, t + .07); } else osc.frequency.setValueAtTime(f, t);
     if (o.f2) osc.frequency.exponentialRampToValueAtTime(o.f2, t + (o.ft || dur));
     if (o.det) osc.detune.value = o.det;
     g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vol, t + (o.a || .004));
-    if (o.hold) g.gain.setValueAtTime(vol, t + dur - o.hold);
+    if (o.hold) g.gain.setValueAtTime(vol, t + dur * o.hold);
     g.gain.exponentialRampToValueAtTime(.0001, t + dur);
     let tail = g;
     if (o.cut) {
@@ -105,73 +144,114 @@ const AU = {
       fl.frequency.setValueAtTime(o.cut, t); if (o.cut2) fl.frequency.exponentialRampToValueAtTime(o.cut2, t + dur);
       g.connect(fl); tail = fl;
     }
-    osc.connect(g); tail.connect(dest); if (o.send) tail.connect(o.send);
+    osc.connect(g); tail.connect(dest);
+    if (o.dly) tail.connect(this.dly);
+    if (o.rev) tail.connect(this.rev);
     osc.start(t); osc.stop(t + dur + .05);
   },
-  hiss(t, dur, vol, type, fq, dest, a) {
+  hiss(t, dur, vol, type, fq, dest, a, rev) {
     const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), f = c.createBiquadFilter();
     s.buffer = this.nbuf; s.loop = true; f.type = type; f.frequency.value = fq;
     g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vol, t + (a || .002)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    s.connect(f); f.connect(g); g.connect(dest); s.start(t, Math.random() * .3); s.stop(t + dur + .05);
+    s.connect(f); f.connect(g); g.connect(dest); if (rev) g.connect(this.rev);
+    s.start(t, Math.random() * .3); s.stop(t + dur + .05);
   },
   kick(t, vol) {
-    this.voice('sine', 165, t, .32, vol, this.mg, { f2: 42, ft: .11 });
-    this.voice('triangle', 900, t, .03, vol * .25, this.mg, { f2: 120 });
+    this.voice('sine', 155, t, .24, vol, this.mg, { f2: 46, ft: .07, hold: .2 });
+    this.hiss(t, .014, vol * .5, 'highpass', 3000, this.mg);
     const g = this.duck.gain;
-    g.cancelScheduledValues(t); g.setValueAtTime(.3, t); g.linearRampToValueAtTime(1, t + .24);
+    g.cancelScheduledValues(t); g.setValueAtTime(.4, t); g.linearRampToValueAtTime(1, t + .17);
+  },
+  clap(t, vol) {
+    for (let k = 0; k < 3; k++) this.hiss(t + k * .011, .02, vol * .7, 'bandpass', 1500, this.mg);
+    this.hiss(t + .03, .16, vol, 'bandpass', 1500, this.mg, 0, true);
+  },
+  // a supersaw chord for one bar, chopped by the song's gate rhythm
+  gateChord(t, sd, gate, freqs, vol, cut) {
+    const c = this.ctx, g = c.createGain(), fl = c.createBiquadFilter();
+    fl.type = 'lowpass'; fl.frequency.value = cut; fl.Q.value = 1.2;
+    g.gain.setValueAtTime(0, t);
+    for (let k = 0; k < 16; k++) {
+      if (!gate[k]) continue;
+      const a = t + k * sd, v = gate[k] * vol;
+      g.gain.setValueAtTime(0, a); g.gain.linearRampToValueAtTime(v, a + .006);
+      g.gain.setValueAtTime(v, a + sd * .5); g.gain.linearRampToValueAtTime(0, a + sd * .92);
+    }
+    for (const f of freqs) for (const det of [-16, -6, 6, 16]) {
+      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+      o.connect(g); o.start(t); o.stop(t + sd * 16 + .05);
+    }
+    g.connect(fl); fl.connect(this.duck); fl.connect(this.rev);
   },
   // i = sixteenth-note index; level 0 calm, 1 combat, 2 boss; late = seconds since the step
-  // was due (keeps spacing even despite frame timing); at = absolute time, for offline renders
+  // was due (keeps spacing even despite frame timing); at = absolute time, for offline renders.
+  //
+  // Arrangement: calm rooms are a breakdown (no kick; chords, plucks and melody). Combat is a
+  // 16-bar loop: 8 bars of groove, then 8 with the gated chords and lead on top, ending in a
+  // snare-roll build. Bosses stay in the full drop. So walking into a fight is the drop.
   step(i, mus, level, bpm, late, at) {
     if (!this.ctx || this.mute) return;
     if (!this.mg) this.initMusic();
     const M = this.MUS[mus % 5], sd = 15 / bpm, t = at !== undefined ? at : this.ctx.currentTime + .06 - Math.min(late || 0, .05);
-    const s = i % 16, bar = Math.floor(i / 16), ph = bar % 16, B = ph >= 8;
-    const n = M.scale.length;
-    const deg = (d, oct) => M.root * Math.pow(2, oct + (M.scale[((d % n) + n) % n] + 12 * Math.floor(d / n)) / 12);
-    const chord = M.prog[(B ? 3 - ((bar >> 1) % 4) : (bar >> 1) % 4)];
-    const fill = bar % 4 === 3 && s >= 12, breakdown = ph === 8 && level < 2, build = ph === 7 || ph === 15;
+    const s = i % 16, bar = Math.floor(i / 16), ph = bar % 16, n = M.scale.length;
+    const full = level > 1 || (level === 1 && ph >= 8), build = level > 0 && ph === 15, cut8 = build && s >= 8;
+    const hz = (d, oct) => M.root * Math.pow(2, oct + (M.scale[((d % n) + n) % n] + 12 * Math.floor(d / n)) / 12);
+    const c0 = M.prog[Math.floor(bar / M.cb) % M.prog.length], cm = c0 > 4 ? c0 - 7 : c0; // keep chords near the tonic
     const sweep = .5 - .5 * Math.cos((bar % 8 + s / 16) / 8 * Math.PI * 2); // 8-bar filter sweep, 0..1
+    const lead = bar % 4 === 3 ? M.leadB : M.leadA;
     this.dly.delayTime.setValueAtTime(sd * 3, t);
 
-    // --- drums
-    if (s % 4 === 0 && !breakdown) this.kick(t, level ? .85 : .5);
+    // --- drums: four on the floor, clap on 2 and 4, open hat on every off-beat
     if (level > 0) {
-      if (s === 4 || s === 12) { this.hiss(t, .16, .2, 'bandpass', 1700, this.mg); this.hiss(t + .012, .1, .12, 'highpass', 2500, this.mg); }
-      if (s % 4 === 2) this.hiss(t, .09 + .06 * sweep, .07, 'highpass', 7500, this.mg);          // open hat on the off-beat
-      if (s % 2 === 1 && (level > 1 || B)) this.hiss(t, .03, .035, 'highpass', 9000, this.mg);    // 16th shaker
-      if (fill) this.hiss(t, .07, .06 + (s - 12) * .035, 'bandpass', 2200, this.mg);              // snare roll into the next phrase
-      if (build && s === 0) this.hiss(t, sd * 16, .09, 'bandpass', 5000, this.duck, sd * 15);      // riser
-      if ((ph === 0 || ph === 8) && s === 0 && bar > 0) this.hiss(t, 1.2, .11, 'highpass', 5000, this.mg); // crash
-    } else if (s === 8) this.hiss(t, .05, .03, 'highpass', 8000, this.mg);
+      if (s % 4 === 0 && !cut8) this.kick(t, .58);
+      if ((s === 4 || s === 12) && !cut8) this.clap(t, .42);
+      if (s % 4 === 2) this.hiss(t, .12, .24, 'highpass', 7000, this.mg);
+      else if (s % 4 !== 0) this.hiss(t, .03, s % 4 === 3 ? .13 : .08, 'highpass', 9500, this.mg);
+      if (full && s % 4 === 0) this.hiss(t, .22, .09, 'bandpass', 6500, this.mg);                         // ride
+      if (build) {                                                                                       // roll: quarters, eighths, sixteenths
+        if (s === 0) this.hiss(t, sd * 16, .25, 'bandpass', 4500, this.duck, sd * 15.5, true);
+        if (s === 0 || s === 4 || s === 8 || s === 10 || s >= 12) this.hiss(t, .09, .16 + s * .022, 'bandpass', 1800 + s * 60, this.mg, 0, true);
+      } else if (ph === 7 && s >= 13) this.hiss(t, .07, .22, 'bandpass', 1900, this.mg);
+      if (ph % 8 === 0 && s === 0 && bar > 0) this.hiss(t, 1.6, .22, 'highpass', 4500, this.mg, 0, true);   // crash on the downbeat
+    } else if (s % 4 === 2) this.hiss(t, .03, .07, 'highpass', 9000, this.mg);
 
-    // --- bass: filtered saw + sub an octave below, on the boss the pattern jumps octaves
-    const bn = M.bass[s];
-    if (level > 0 ? bn >= 0 : s === 0) {
-      const d = chord + (level > 0 ? bn : 0) + (level > 1 && s % 8 === 6 ? 7 : 0), cut = 260 + 1300 * sweep + level * 350;
-      this.voice(M.bassW, deg(d, 1), t, sd * (level ? 1.7 : 6), level ? .2 : .1, this.duck, { cut, cut2: 140, q: 7 });
-      this.voice('sine', deg(d, 0), t, sd * (level ? 1.9 : 7), .26, this.duck, { a: .008 });
-    }
-
-    // --- pad: detuned triad, re-struck every bar, opening up with the sweep
-    if (s === 0) for (const k of [0, 2, 4]) for (const det of [-9, 9])
-      this.voice('sawtooth', deg(chord + k, 2), t, sd * 16.5, level ? .028 : .04, this.duck, { a: sd * 3, hold: sd * 3, det, cut: 500 + 1500 * sweep + level * 300, q: .7 });
-
-    // --- arpeggio: plucks into the delay; the B half of each phrase uses the next song's pattern
-    const ap = (B ? this.MUS[(mus + 1) % 5].arp : M.arp)[s];
-    if (ap >= 0 && (level > 0 || s % 4 === 0)) {
-      const f = deg(chord + [0, 2, 4, 7][ap], 3);
-      this.voice(M.arpW, f, t, sd * 1.6, level ? .05 : .03, this.duck, { cut: 900 + 2600 * sweep, cut2: 500, q: 3, send: this.dly });
-    }
-
-    // --- lead (boss only): a fixed pseudo-random melody per song, eight bars long
-    if (level > 1 && s % 2 === 0) {
-      const h = (((bar % 8) * 31 + s * 17 + mus * 7 + 3) * 2654435761) >>> 0;
-      if (h % 100 < 58) {
-        const f = deg(chord + [0, 2, 4, 6, 7, 9][(h >>> 8) % 6], 4);
-        this.voice('sawtooth', f, t, sd * ((h >>> 12) % 3 === 0 ? 3.6 : 1.8), .04, this.duck, { det: 6, cut: 3500, cut2: 1200, q: 2, send: this.dly });
-        this.voice('square', f / 2, t, sd * 1.6, .018, this.duck, { cut: 2000, send: this.dly });
+    // --- bass
+    if (level > 0 && !cut8) {
+      const b = M.bass[s];
+      if (b >= 0) {
+        this.voice(M.bassW, hz(cm + b, 1), t, sd * M.bassLen, .26, this.duck, { cut: M.bassCut * (1.6 + 2.4 * sweep) + level * 150, cut2: 160, q: 6 });
+        this.voice('sine', hz(cm, 0), t, sd * M.bassLen, .11, this.duck, { a: .006, hold: .4 });
       }
+      const a = M.acid ? M.acid[s] : -1;
+      if (a >= 0) {
+        const f = hz(cm + a, 1), acc = M.acc[s], sl = M.sl[s];
+        this.voice('sawtooth', f, t, sd * (sl ? 2 : .95), acc ? .32 : .22, this.duck,
+          { from: sl ? this.lastAcid : 0, cut: (350 + 1900 * sweep) * (acc ? 2.6 : 1.3), cut2: 200, q: 14, dly: !!acc });
+        this.lastAcid = f;
+      }
+    } else if (level === 0 && s === 0 && bar % M.cb === 0) {
+      this.voice('sine', hz(cm, 1), t, sd * 16 * M.cb, .09, this.mg, { a: .2, hold: .6 });
+      this.voice('triangle', hz(cm + 4, 1), t, sd * 16 * M.cb, .04, this.mg, { a: .4, hold: .6 });
+    }
+
+    // --- gated supersaw chord (calm: soft and filtered; drop: wide open)
+    if (s === 0 && (level === 0 || full) && !build) {
+      const fr = [hz(cm, 2), hz(cm + 2, 2), hz(cm + 4, 2), hz(cm + 7, 2)];
+      this.gateChord(t, sd, M.gate, fr, level ? .06 : .04, level ? 1400 + 3200 * sweep : 500 + 900 * sweep);
+    }
+
+    // --- pluck arpeggio
+    const ap = M.arp ? M.arp[s] : -1;
+    if (ap >= 0 && !cut8)
+      this.voice(M.arpW, hz(cm + ap, 3), t, sd * 1.5, full ? .12 : .14, this.duck, { cut: 1100 + 3200 * sweep, cut2: 500, q: 2.5, dly: true, rev: level === 0 });
+
+    // --- lead: three detuned saws, an octave doubled on bosses; short repeating figures
+    const L = lead ? lead[s] : -1;
+    if (L >= 0 && (full || (level === 0 && bar % 8 >= 4)) && !build) {
+      let len = 1; while (s + len < 16 && lead[s + len] === -2) len++;
+      const f = hz(cm + L, 3), v = level ? .1 : .06, o = { cut: 1800 + 3500 * sweep, cut2: 900, q: 1.5, hold: .6, dly: true, rev: true };
+      for (const det of [-11, 0, 11]) this.voice('sawtooth', f, t, sd * (len + .4), v, this.duck, Object.assign({ det }, o));
+      if (level > 1) this.voice('square', f * 2, t, sd * (len + .2), .03, this.duck, o);
     }
   }
 };

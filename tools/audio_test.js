@@ -1,4 +1,6 @@
-// Renders the soundtrack offline in headless Chrome and prints level statistics.
+// Renders the soundtrack offline in headless Chrome.
+//   node tools/audio_test.js             print level statistics for every song and intensity
+//   node tools/audio_test.js --wav DIR   also write song0.wav .. song4.wav previews into DIR
 const { spawn } = require('child_process'), path = require('path'), os = require('os'), fs = require('fs');
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe', PORT = 9377;
 const page = 'file:///' + path.join(__dirname, 'audio_test.html').split(path.sep).join('/');
@@ -14,7 +16,21 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   if (!target) throw new Error('could not reach Chrome');
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise(r => ws.addEventListener('open', r));
-  ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: 'new Promise(r => { const t = setInterval(() => { if (window.result) { clearInterval(t); r(window.result); } }, 100); })', awaitPromise: true, returnByValue: true } }));
-  const msg = await new Promise(r => ws.addEventListener('message', e => r(JSON.parse(e.data))));
-  console.log(msg.result && msg.result.result ? msg.result.result.value : JSON.stringify(msg));
+  let id = 0; const pending = {};
+  ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (pending[m.id]) pending[m.id](m); });
+  const run = expr => new Promise((res, rej) => {
+    pending[++id] = m => m.result && m.result.result && !m.result.exceptionDetails ? res(m.result.result.value) : rej(new Error(JSON.stringify(m).slice(0, 600)));
+    ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression: expr, awaitPromise: true, returnByValue: true } }));
+  });
+  // the page may still be navigating when we first attach, so retry until it answers
+  for (let k = 0; ; k++) {
+    try { await run('new Promise(r => { const t = setInterval(() => { if (window.ready) { clearInterval(t); r(1); } }, 100); })'); break; }
+    catch (e) { if (k > 8) throw e; await sleep(300); }
+  }
+  console.log(await run('stats()'));
+  const w = process.argv.indexOf('--wav');
+  if (w > 0) {
+    const dir = process.argv[w + 1]; fs.mkdirSync(dir, { recursive: true });
+    for (let m = 0; m < 5; m++) { const f = path.join(dir, 'song' + m + '.wav'); fs.writeFileSync(f, Buffer.from(await run('wav(' + m + ')'), 'base64')); console.log('wrote', f); }
+  }
 })().catch(e => console.error(e.message)).finally(() => { chrome.kill(); });

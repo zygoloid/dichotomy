@@ -3,17 +3,17 @@
 // hazards as probabilities. pc = [light, dark] polarity colours; light always renders solid with a
 // white core and dark as a hollow ring, so the two stay readable in any palette.
 const STAGES = [
-  { pc: ['#5ff4ff', '#ff3d9a'], bg: '#04050d', line: '#1c2f7a', wall: '#3d6bff', bpm: 120, style: 0, boss: ['mono'], mus: 0, depth: 0, haz: {} },
-  { pc: ['#b6ff5c', '#b45cff'], bg: '#0a0612', line: '#47226e', wall: '#ff8a3d', bpm: 128, style: 1, boss: ['gem', 'gem'], mus: 1, depth: 1, haz: { gate: .6 } },
-  { pc: ['#ffe66b', '#4a7dff'], bg: '#020308', line: '#231a55', wall: '#8b5cff', bpm: 100, style: 2, boss: ['sing'], mus: 2, depth: 2, haz: { well: 1, wellN: 2 } },
-  { pc: ['#bfe9ff', '#ff5a36'], bg: '#0c0404', line: '#5a1414', wall: '#ff2d55', bpm: 140, style: 3, boss: ['metro'], mus: 3, depth: 3, haz: { flip: 1 } },
-  { pc: ['#7dffd0', '#ff4ae0'], bg: '#000000', line: '#2c2c3a', wall: '#ffffff', bpm: 150, style: 4, boss: ['eclipse'], mus: 4, depth: 4, haz: { well: .4, gate: .3 } },
+  { pc: ['#5ff4ff', '#ff3d9a'], bg: '#04050d', line: '#1c2f7a', wall: '#3d6bff', bpm: 126, style: 0, boss: ['mono'], mus: 0, depth: 0, haz: {} },
+  { pc: ['#b6ff5c', '#b45cff'], bg: '#0a0612', line: '#47226e', wall: '#ff8a3d', bpm: 132, style: 1, boss: ['gem', 'gem'], mus: 1, depth: 1, haz: { gate: .6 } },
+  { pc: ['#ffe66b', '#4a7dff'], bg: '#020308', line: '#231a55', wall: '#8b5cff', bpm: 124, style: 2, boss: ['sing'], mus: 2, depth: 2, haz: { well: 1, wellN: 2 } },
+  { pc: ['#bfe9ff', '#ff5a36'], bg: '#0c0404', line: '#5a1414', wall: '#ff2d55', bpm: 138, style: 3, boss: ['metro'], mus: 3, depth: 3, haz: { flip: 1 } },
+  { pc: ['#7dffd0', '#ff4ae0'], bg: '#000000', line: '#2c2c3a', wall: '#ffffff', bpm: 140, style: 4, boss: ['eclipse'], mus: 4, depth: 4, haz: { well: .4, gate: .3 } },
   // alternates for the first three depths
-  { pc: ['#7df9ff', '#ff7a3d'], bg: '#020a0c', line: '#0f4d55', wall: '#22d3c5', bpm: 112, style: 5, boss: ['tide'], mus: 1, depth: 0, haz: { flow: .75 } },
-  { pc: ['#fff27d', '#ff4d6d'], bg: '#0b0508', line: '#4d1832', wall: '#e85d9a', bpm: 132, style: 6, boss: ['kalei'], mus: 3, depth: 1, haz: { bounce: 1 } },
-  { pc: ['#ffd0a1', '#a66bff'], bg: '#0a0502', line: '#4d2408', wall: '#ff7b1c', bpm: 108, style: 7, boss: ['binary'], mus: 2, depth: 2, haz: { field: .75 } },
+  { pc: ['#7df9ff', '#ff7a3d'], bg: '#020a0c', line: '#0f4d55', wall: '#22d3c5', bpm: 130, style: 5, boss: ['tide'], mus: 3, depth: 0, haz: { flow: .75 } },
+  { pc: ['#fff27d', '#ff4d6d'], bg: '#0b0508', line: '#4d1832', wall: '#e85d9a', bpm: 138, style: 6, boss: ['kalei'], mus: 4, depth: 1, haz: { bounce: 1 } },
+  { pc: ['#ffd0a1', '#a66bff'], bg: '#0a0502', line: '#4d2408', wall: '#ff7b1c', bpm: 126, style: 7, boss: ['binary'], mus: 0, depth: 2, haz: { field: .75 } },
   // the last floor: bullets ricochet and every room draws one hazard from the whole set
-  { pc: ['#fff6d6', '#ff2e63'], bg: '#070500', line: '#4a3a08', wall: '#ffd23f', bpm: 160, style: 8, boss: ['crown'], mus: 4, depth: 5, haz: { bounce: 1, pick: 1 } }
+  { pc: ['#fff6d6', '#ff2e63'], bg: '#070500', line: '#4a3a08', wall: '#ffd23f', bpm: 142, style: 8, boss: ['crown'], mus: 3, depth: 5, haz: { bounce: 1, pick: 1 } }
 ];
 // theme choices per depth, and the unlock that gates each alternate
 const SLOTS = [[0, 5], [1, 6], [2, 7], [3], [4], [8]], ALT_UNLOCK = { 5: 'alt1', 6: 'alt2', 7: 'alt3' };

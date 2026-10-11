@@ -470,8 +470,8 @@ function frame(dt) {
   if (IN.hit('KeyM')) { AU.mute = META.mute = !AU.mute; saveMeta(); }
   if (G.state === 'title' || G.state === 'gallery') {
     // menu music: the first song at its calmest
-    const b = G.t * 116 / 15, st = Math.floor(b);
-    if (st !== G.mstep) { G.mstep = st; AU.step(st, 0, 0, 116, (b - st) * 15 / 116); }
+    const b = G.t * 126 / 15, st = Math.floor(b);
+    if (st !== G.mstep) { G.mstep = st; AU.step(st, 0, 0, 126, (b - st) * 15 / 126); }
   }
   switch (G.state) {
     case 'title': updateTitle(); break;
