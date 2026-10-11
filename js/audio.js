@@ -158,25 +158,27 @@ const AU = {
       bass: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 7],
       gate: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1],
       arp: [0, 2, 4, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 4, 7],
-      // A falling four-note figure per chord, all starting from the top of the phrase:
-      //   D: F# D C# A (a lush major seventh)   E: G# E B G# (plain triad)   F#m: F# E C# A (minor seventh)
-      // The E bars avoid D: E-D-B-G# spells a dominant seventh, which pulls toward A major and
-      // out of the key.
+      // An eight-bar arc rather than one figure repeated: each chord states its falling figure,
+      // then the second bar carries it on down (D, F#m) or climbs back up (E, end of F#m).
+      //   D:   F# D C# A C#      | F# D A F# D B A (falls an octave and a half)
+      //   E:   B E G# B E (rises) | G# E G# B G# E G#
+      //   F#m: F# E C# A C#      | F# E C# A F# E C# (falls) | C# F# A C# F# (rises) | A F# E C# E F# A
+      // Over E there is no D: E-D-B-G# spells a dominant seventh, which pulls toward A major.
       mel: [
-        '14 - - 12 - - 11 - 9 - - 11 - - - .', '14 - - 12 - - 11 - 9 - - 12 - - - .',
-        '15 - - 13 - - 10 - 8 - - 10 - - - .', '15 - - 13 - - 10 - 15 - - 13 - 11 10 -',
-        '14 - - 13 - - 11 - 9 - - 11 - - - .', '14 - - 13 - - 11 - 9 - - 11 - - - .',
-        '14 - - 13 - - 11 - 9 - - 11 - - - .', '14 - - 13 - - 11 - 16 - - 14 - 13 11 -'].map(_bar),
+        '14 - - 12 - - 11 - 9 - - 11 - - - .', '14 - - 12 - - 9 - 7 - 5 - 3 - 2 -',
+        '3 - - 6 - - 8 - 10 - - 13 - - - .', '15 - - 13 - - 15 - 17 - - 15 - 13 15 -',
+        '14 - - 13 - - 11 - 9 - - 11 - - - .', '14 - - 13 - - 11 - 9 - 7 - 6 - 4 -',
+        '4 - - 7 - - 9 - 11 - - 14 - - - .', '16 - - 14 - - 13 - 11 - - 13 - 14 16 -'].map(_bar),
       melB: [ // the rising variation, likewise
         '9 - - - 11 - 12 - - - 14 - 12 - - .', '9 - - - 11 - 12 - - - 14 - 12 - - .',
         '10 - - - 11 - 13 - - - 15 - 13 - - .', '10 - - - 11 - 13 - 17 - - 15 - 13 11 -',
         '11 - - - 13 - 14 - - - 16 - 14 - - .', '11 - - - 13 - 14 - - - 16 - 14 - - .',
         '11 - - - 13 - 14 - - - 16 - 14 - - .', '11 - - - 13 - 14 - 18 - - 16 - 14 13 -'].map(_bar),
-      melP: [ // over F#m D A E
-        '14 - - 13 - - 11 - 9 - - 11 - - - .', '14 - - 13 - - 11 - 16 - - 14 - 13 11 -',
-        '14 - - 12 - - 11 - 9 - - 11 - - - .', '14 - - 12 - - 11 - 9 - - 12 - - - .',
-        '16 - - 13 - - 11 - 9 - - 11 - - - .', '16 - - 13 - - 11 - 13 - - 11 - - - .',
-        '15 - - 13 - - 10 - 8 - - 10 - - - .', '15 - - 13 - - 10 - 15 - - 13 - 11 10 -'].map(_bar),
+      melP: [ // the same arc over F#m D A E
+        '14 - - 13 - - 11 - 9 - - 11 - - - .', '14 - - 13 - - 11 - 9 - 7 - 6 - 4 -',
+        '14 - - 12 - - 11 - 9 - - 11 - - - .', '14 - - 12 - - 9 - 7 - 5 - 3 - 2 -',
+        '9 - - 11 - - 13 - 16 - - 18 - - - .', '16 - - 13 - - 11 - 9 - - 11 - - - .',
+        '3 - - 6 - - 8 - 10 - - 13 - - - .', '15 - - 13 - - 15 - 17 - - 15 - 13 15 -'].map(_bar),
       lift: 2, progB: [0, 5, 2, 6],
       bassB: [-1, 0, 0, 0, -1, 0, 7, 0, -1, 0, 0, 0, -1, 7, 0, 7],
       gateB: [1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1],
