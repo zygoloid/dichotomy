@@ -36,7 +36,7 @@
       G.god = true;
       if (hash.includes('pause')) setTimeout(() => { G.state = 'pause'; }, 300);
       const pre = /-t(\d+)/.exec(hash.replace("title", "").replace("treasure", "").replace("stage", ""));
-      for (let i = 0; pre && i < +pre[1] * 60; i++) { if (!hash.includes("still")) demoBot(); frame(1 / 60); IN.end(); }
+      for (let i = 0; pre && i < +pre[1] * 60; i++) { if (hash.includes("onped")) demoOnPed(); else if (!hash.includes("still")) demoBot(); frame(1 / 60); IN.end(); }
     }
   }
 
@@ -58,6 +58,15 @@
   }
   requestAnimationFrame(tick);
 })();
+
+// screenshot helper: park on the room's first pedestal and fire at the practice targets
+function demoOnPed() {
+  const p = R.room.peds[0], t = R.enemies[1];
+  if (p) { R.P.x = p.x; R.P.y = p.y; }
+  IN.mouseAim = true; IN.mb[0] = !!t;
+  if (t) { IN.mx = t.x; IN.my = t.y; }
+  if (R.time % 1.5 < .02) IN.pressed.KeyQ = true;
+}
 
 // crude autopilot: circle, shoot the nearest enemy; match the colour of any close bullet,
 // otherwise take the colour that can hurt the target

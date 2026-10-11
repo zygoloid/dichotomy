@@ -172,6 +172,17 @@ E('mirror', {
   }
 });
 
+// Practice targets that appear while an upgrade is being tried out on a pedestal. They never
+// die for real, give nothing, and their bullets cannot hurt.
+E('dummy', {
+  hp: 120, r: 18, sides: 4, cost: 99, min: 99,
+  init(e) { e.dummy = true; e.cd = .6; e.q = 0; e.hx = e.x; e.hy = e.y; },
+  ai(e, dt) {
+    e.vx = lerp(e.vx, (e.hx - e.x) * 4, Math.min(1, 6 * dt)); e.vy = lerp(e.vy, (e.hy - e.y) * 4, Math.min(1, 6 * dt));
+    if (e.gun && (e.cd -= dt) <= 0) { e.cd = .45; e.q ^= 1; eb(e.x, e.y, aimP(e) + rand(-.04, .04), 150, e.q, 6, { demo: true, bn: 0 }); }
+  }
+});
+
 // ---------------------------------------------------------------- mini-bosses
 // splits twice; extra = health of the heads it has yet to grow, for the health bar
 E('hydra', {
@@ -422,7 +433,15 @@ function damageEnemy(e, d, crit) {
   if (e.dead || e.spawn > 0 || d <= 0) return;
   e.hp -= d; e.fl = .08;
   if (crit) fxParts(e.x, e.y, '#ffffff', 4, 220);
-  if (e.hp <= 0) killEnemy(e);
+  if (e.hp > 0) return;
+  if (e.dummy) { e.hp = e.maxHp; e.burn = 0; fxParts(e.x, e.y, PAL.pc[e.pol], 10, 200); swarmDarts(e); }
+  else killEnemy(e);
+}
+
+function swarmDarts(e) {
+  const P = R.P;
+  for (let i = 0; i < 3 * P.stats.swarm; i++)
+    spawnShot(e.x, e.y, rand(TAU), { dmg: shotDmg() * .5, pol: P.pol, hom: 6, spd: 420, life: 1.4, size: .8, split: 0, frag: 0, proj: true, kid: true });
 }
 
 function killEnemy(e) {
@@ -434,8 +453,7 @@ function killEnemy(e) {
   if (P.seqN > 0 && e.pol !== P.seqPol) { P.chain = 0; P.seqN = 0; }
   P.seqPol = e.pol; P.seqN++;
   if (P.seqN === 3) { P.seqN = 0; P.chain++; mMax('chain', P.chain); AU.sfx('pick'); }
-  if (P.stats.swarm) for (let i = 0; i < 3 * P.stats.swarm; i++)
-    spawnShot(e.x, e.y, rand(TAU), { dmg: shotDmg() * .5, pol: P.pol, hom: 6, spd: 420, life: 1.4, size: .8, split: 0, frag: 0, proj: true, kid: true });
+  swarmDarts(e);
   const col = PAL.pc[e.pol];
   fxParts(e.x, e.y, col, e.boss ? 80 : 14, e.boss ? 520 : 260);
   fxRing(e.x, e.y, e.boss ? .12 : .025, e.boss ? 900 : 420, e.boss ? 1.2 : .45);
@@ -481,7 +499,7 @@ function updateEnemies(dt) {
     e.x += e.vx * d; e.y += e.vy * d;
     e.x = clamp(e.x, BX0 + e.r, BX1 - e.r); e.y = clamp(e.y, BY0 + e.r, BY1 - e.r);
     if (!e.boss) for (const o of R.room.obs) { const h = circRect(e.x, e.y, e.r, o); if (h) { e.x += h.x; e.y += h.y; } }
-    if (hyp(P.x - e.x, P.y - e.y) < e.r * .85 + P.stats.hitR) hurtPlayer();
+    if (!e.dummy && hyp(P.x - e.x, P.y - e.y) < e.r * .85 + P.stats.hitR) hurtPlayer();
     if (e.beams) for (const b of e.beams) {
       if (b.state !== 'on') continue;
       const L = rayLen(e.x, e.y, b.ang);

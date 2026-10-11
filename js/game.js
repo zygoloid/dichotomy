@@ -31,7 +31,7 @@ function newRun() {
   };
   R.P = {
     x: W / 2, y: H / 2, vx: 0, vy: 0, kx: 0, ky: 0, pol: 0, ups: [], hp: 1, sh: 0, charge: 0, inv: 0, fireCd: 0, vq: [],
-    novaCd: 0, lockT: 0, ang: -Math.PI / 2, face: -Math.PI / 2, still: 0, drones: [], misCd: 1, mineCd: 0, teslaCd: 0, orbCd: 2, bladeCd: 0, heat: 0, railN: 0, hist: [], fl: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, shards: 0, refl: 0, vampN: 0, seqPol: -1, seqN: 0, chain: 0, preview: null,
+    novaCd: 0, lockT: 0, ang: -Math.PI / 2, face: -Math.PI / 2, still: 0, drones: [], misCd: 1, mineCd: 0, teslaCd: 0, orbCd: 2, bladeCd: 0, heat: 0, railN: 0, hist: [], fl: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, shards: 0, refl: 0, vampN: 0, ofl: 0, seqPol: -1, seqN: 0, chain: 0, preview: null,
     stats: null, rateBuff: 0, hit: false, firing: false, dn: 0
   };
   const P = R.P;
@@ -160,6 +160,12 @@ function giveUp(id) {
 function hurtPlayer() {
   const P = R.P, s = P.stats;
   if (P.inv > 0 || R.over || G.god) return;
+  // dead man's switch: with half a meter banked, the hit sets off the burst instead
+  if (s.deadman && chgFrac() >= .5 / s.deadman && releaseBurst()) {
+    P.inv = .9;
+    for (const b of R.bullets) if (hyp(b.x - P.x, b.y - P.y) < 150) { b.dead = true; fxParts(b.x, b.y, PAL.pc[b.pol], 1, 120); }
+    return;
+  }
   if (P.sh > 0) P.sh--; else P.hp--;
   P.inv = s.inv; P.hit = true; P.chain = 0; P.seqN = 0;
   mAdd('hits');
@@ -189,8 +195,13 @@ function flipPolarity() {
 function absorbBullet(b) {
   const P = R.P, s = P.stats;
   b.dead = true;
+  if (s.overflow && chg() >= s.chargeMax) {
+    // overflow: charge that would be wasted leaves as homing shots
+    P.ofl += .5 * s.overflow;
+    while (P.ofl >= 1) { P.ofl--; spawnShot(P.x, P.y, rand(TAU), { dmg: shotDmg(), pol: P.pol, hom: 6, proj: true }); }
+  }
   P.charge = Math.min(s.chargeMax, P.charge + 2.2 * s.gain);
-  R.st.absorbed++; mAdd('absorbed');
+  if (!b.demo) { R.st.absorbed++; mAdd('absorbed'); }
   if (s.reflect) {
     P.refl += s.reflect * .34;
     while (P.refl >= 1) {
@@ -199,7 +210,7 @@ function absorbBullet(b) {
       spawnShot(P.x, P.y, t ? Math.atan2(t.y - P.y, t.x - P.x) : P.ang, { dmg: shotDmg(), pol: P.pol ^ 1, hom: 4 });
     }
   }
-  if (s.vamp && ++P.vampN >= 90 / s.vamp) { P.vampN = 0; heal(1); }
+  if (s.vamp && !b.demo && ++P.vampN >= 90 / s.vamp) { P.vampN = 0; heal(1); }
   R.parts.push({ x: b.x, y: b.y, vx: (P.x - b.x) * 6, vy: (P.y - b.y) * 6, t: 0, life: .15, col: PAL.pc[b.pol], s: 4, rot: 0 });
   AU.sfx('absorb', P.charge);
 }
@@ -209,7 +220,9 @@ function updatePlayer(dt) {
   let mx = (IN.down('KeyD') ? 1 : 0) - (IN.down('KeyA') ? 1 : 0), my = (IN.down('KeyS') ? 1 : 0) - (IN.down('KeyW') ? 1 : 0);
   if (hyp(IN.padMove.x, IN.padMove.y) > .25) { mx = IN.padMove.x; my = IN.padMove.y; }
   const l = Math.max(1, hyp(mx, my)), k = 1 - Math.exp(-dt * 16);
-  P.vx = lerp(P.vx, mx / l * s.move, k); P.vy = lerp(P.vy, my / l * s.move, k);
+  const mv = s.move * (1 + .25 * s.flux * chgFrac());
+  P.vx = lerp(P.vx, mx / l * mv, k); P.vy = lerp(P.vy, my / l * mv, k);
+  if (s.trickle) P.charge = Math.min(s.chargeMax, P.charge + 3 * s.trickle * dt);
   const kd = Math.exp(-dt * 6); P.kx *= kd; P.ky *= kd;
   let px = 0, py = 0;
   for (const w of R.wells) {
@@ -289,9 +302,9 @@ function updateBullets(dt) {
     if (b.dead) continue;
     const dx = b.x - P.x, dy = b.y - P.y, d2 = dx * dx + dy * dy;
     if (b.pol === P.pol) { if (d2 < (aR + b.r) * (aR + b.r)) absorbBullet(b); }
-    else if (d2 < (hR + b.r * .6) * (hR + b.r * .6)) { b.dead = true; hurtPlayer(); }
+    else if (d2 < (hR + b.r * .6) * (hR + b.r * .6)) { b.dead = true; if (b.demo) fxParts(b.x, b.y, PAL.pc[b.pol], 3, 100); else hurtPlayer(); }
     else if (!b.gz && d2 < (hR + b.r + 20) * (hR + b.r + 20) && P.inv <= 0) {
-      b.gz = true; mAdd('grazes'); AU.sfx('graze');
+      b.gz = true; if (!b.demo) mAdd('grazes'); AU.sfx('graze');
       R.parts.push({ x: P.x + dx * .5, y: P.y + dy * .5, vx: rand(-60, 60), vy: rand(-60, 60), t: 0, life: .25, col: '#ffffff', s: 3, rot: 0 });
       if (s.graze) { P.charge = Math.min(s.chargeMax, P.charge + 3 * s.graze * s.gain); P.rateBuff = 1 + .5 * s.graze; }
     }
@@ -320,11 +333,25 @@ function updatePickups(dt) {
 function takePed(p) {
   const P = R.P, room = R.room;
   if (P.shards < p.price || (p.heart && P.hp >= P.stats.maxHp) || (p.hpCost && computeStats(R.ship, P.ups).maxHp <= 1)) { AU.sfx('deny'); return; }
+  clearDemo();
   P.shards -= p.price; p.taken = true;
   if (p.hpCost) { P.ups.push('scar'); AU.sfx('hurt'); fxShake(10); R.flash = 1; }
   if (p.heart) { heal(1); AU.sfx('take'); } else giveUp(p.up);
   if (p.group) for (const q of room.peds) if (q.group === p.group && !q.taken) { q.taken = true; fxParts(q.x, q.y, '#888888', 12, 200); }
   if (room.type === 'challenge' && !room.done) { room.done = true; room.cleared = false; R.wave = 0; spawnWave(room.waves[0]); AU.sfx('warp'); fxShake(10); }
+}
+
+// Trying an upgrade on a pedestal: two targets (one of each colour) and a harmless gun appear.
+function spawnDemo() {
+  if (R.enemies.length) return;
+  const top = R.P.y > H / 2 - 40, y = top ? BY0 + 95 : BY1 - 95;
+  makeEnemy('dummy', W / 2 - 330, y, 0, .3); makeEnemy('dummy', W / 2 - 170, y, 1, .3);
+  makeEnemy('dummy', W / 2 + 330, y, 0, .3).gun = true;
+  for (const e of R.enemies) { e.hx = e.x; e.hy = e.y; if (e.gun) e.sidesOverride = 3; }
+}
+function clearDemo() {
+  if (!R.enemies.some(e => e.dummy)) return;
+  R.enemies = R.enemies.filter(e => !e.dummy); R.bullets = R.bullets.filter(b => !b.demo);
 }
 
 // free pedestals in the current room that a reroll would replace
@@ -349,7 +376,7 @@ function updateRoom(dt) {
   let near = null;
   for (const p of room.peds) if (!p.taken && hyp(p.x - P.x, p.y - P.y) < 50) near = p;
   const pid = near && near.up ? near.up : null;
-  if (pid !== P.preview) { P.preview = pid; recompute(); }
+  if (pid !== P.preview) { P.preview = pid; recompute(); if (pid) spawnDemo(); else clearDemo(); }
   R.nearPed = near;
   if (near && (IN.hit('KeyE') || IN.hit('KeyF') || IN.hit('Enter'))) takePed(near);
   if (IN.hit('KeyR')) {
@@ -387,7 +414,7 @@ function update(dt) {
   R.time += dt;
   R.beat = R.time * PAL.bpm / 60;
   const step = Math.floor(R.beat * 4);
-  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0); }
+  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.some(e => !e.dummy) ? 1 : 0); }
 
   // the room's current: reverses every 16 beats unless a boss is steering it
   const fl = R.room.flow;

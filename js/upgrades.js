@@ -10,6 +10,7 @@ function baseStats() {
     pblank: 0, tether: 0, grav: 0, volley: 0, echo: 0, eraser: 0, dichro: 0, recoil: 0, ricoGrow: 0,
     pierceGrow: 0, kinetic: 0, turret: 0, berserk: 0, oppMul: 2, sameMul: 0, // same-colour hits are deflected unless an upgrade says otherwise
     beam: 0, drone: 0, missile: 0, mine: 0, tesla: 0,
+    bwave: 0, baegis: 0, bfocus: 0, bpolar: 0, deadman: 0, overflow: 0, dynamo: 0, flux: 0, vacuum: 0, trickle: 0, corona: 0,
     spinup: 0, blade: 0, rail: 0, orb: 0, flak: 0, convert: 0, ghost: 0, flail: 0, swarm: 0, map: 0,
     // pilot
     maxHp: 4, move: 300, hitR: 5, absorbR: 26, magnet: 90, luck: 0, chargeMax: 100, gain: 1, burstN: 1,
@@ -68,6 +69,18 @@ U('battery', 1, 'P2,3,8,3,8,9,2,9;L4,1.5,6,1.5;L4,6,6,6;L5,5,5,7', s => { s.char
 U('nova', 1, 'C5,5,2;C5,5,4.2;D5,5,.8', s => { s.nova += 1; }, 'flips', 150);
 U('contrast', 1, 'C5,5,4;F5,1,5,9,3,8.5,1.4,6.8,1,5,1.4,3.2,3,1.5', s => { s.oppMul += 0.6; s.sameMul *= 0.6; }, 'flips', 400);
 
+// --- burst modifiers and upgrades that feed on the charge meter
+U('flux', 0, 'L1,8,4,2,7,8;F8.5,1,6.5,4.5,8,4.5,7,8,9.5,3.5,8.2,3.5', s => { s.flux += 1; }, 'bursts', 5);
+U('dynamo', 1, 'F5,1,1.5,5.5,4,5.5,3,9,6.5,4.5,4,4.5;P7.5,1,9.5,3,7.5,5,5.5,3', s => { s.dynamo += 1; });
+U('trickle', 1, 'P5,1.5,7.5,6,5,9,2.5,6;L5,5,5,7', s => { s.trickle += 1; s.gain *= 0.75; });
+U('bwave', 1, 'D5,5,1;R5,5,3,-60,60;R5,5,3,120,240;R5,5,4.6,-60,60;R5,5,4.6,120,240', s => { s.bwave += 1; }, 'bursts', 15);
+U('baegis', 1, 'P5,1,9,3,9,6,5,9,1,6,1,3;D5,5,1.5', s => { s.baegis += 1; }, 'bursts', 40);
+U('deadman', 1, 'P5,1,9,3,9,6,5,9,1,6,1,3;F6,2.5,3.5,5.5,5,5.5,4,8,6.8,4.6,5.2,4.6', s => { s.deadman += 1; }, 'hits', 30);
+U('bfocus', 2, 'L2,9,5,5,8,9;A5,5,5,.8', s => { s.bfocus += 1; });
+U('vacuum', 2, 'P2,3,8,3,8,9,2,9;L4,1.5,6,1.5', s => { s.vacuum += 1; });
+U('overflow', 2, 'P2,4,8,4,8,9,2,9;A5,5,5,.8;L3,2.5,3,1.5;L7,2.5,7,1.5', s => { s.overflow += 1; }, 'absorbed', 500);
+U('corona', 2, 'C5,5,2;R5,5,4,0,50;R5,5,4,90,140;R5,5,4,180,230;R5,5,4,270,320', s => { s.corona += 1; }, 'absorbed', 900);
+U('bpolar', 2, 'C5,5,4;D3.5,5,1;C6.5,5,1', s => { s.bpolar += 1; }, 'absorbed', 1200);
 U('compass', 0, 'C5,5,4;F5,1.8,6.3,5,5,8.2,3.7,5', s => { s.map += 1; s.luck += 1; }, 'rooms', 150);
 U('blade', 1, 'R1.5,8.5,7,280,350;R1.5,8.5,4.5,280,350;L1.5,8.5,4,6', s => { s.blade += 1; });
 U('spinup', 1, 'R5,4.5,3.3,0,300;L5,4.5,7.4,2.4;L1,9,3,9;L4,9,6.5,9;L7.5,9,9,9', s => { s.spinup += 1; });
@@ -94,7 +107,7 @@ U('lance', 2, 'A1,9,9,1;L3,4,6,7;L5,2.5,7.5,5', s => { s.pierce += 1; s.pierceGr
 U('reflect', 2, 'L7,1,7,9;A1,3,6.5,5;A6.5,5,1,7.5', s => { s.reflect += 1; }, 'absorbed', 800);
 U('graze', 2, 'C4,5,2;L8,1,8,9;L6.2,3,6.2,3.6;L6.2,6.4,6.2,7', s => { s.graze += 1; }, 'grazes', 200);
 U('eraser', 2, 'C5,5,3.5;L2.5,2.5,7.5,7.5', s => { s.eraser += 1; }, 'absorbed', 2000);
-U('dichro', 2, 'C3.5,5,2.5;D6.8,5,2.5', s => { s.dichro += 1; s.oppMul += 0.25; });
+U('dichro', 2, 'C3.5,5,2.5;D6.8,5,2.5', s => { s.dichro += 1; s.oppMul += 0.25; }, 'flips', 400);
 U('harmony', 2, 'C3.8,5,2.8;C6.2,5,2.8', s => { s.sameMul += 0.6; }, 'absorbed', 1500);
 U('vamp', 2, 'P5,9,1.5,5,3,2,5,3.5,7,2,8.5,5', s => { s.vamp += 1; }, 'hits', 50);
 U('kinetic', 2, 'P6,2,9,5,6,8;L1,3.5,4,3.5;L1,5,5,5;L1,6.5,4,6.5', s => { s.kinetic += 1; }, 'rooms', 100);

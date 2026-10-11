@@ -170,7 +170,7 @@ function drawEnemy(c, e) {
     const a = r, b = r * .38, pts = [[b, -a], [b, -b], [a, -b], [a, b], [b, b], [b, a], [-b, a], [-b, b], [-a, b], [-a, -b], [-b, -b], [-b, -a]];
     for (const [px, py] of pts) c.lineTo(x + px * cs - py * sn, y + px * sn + py * cs);
     c.closePath();
-  } else polyPath(c, x, y, r, d.sides, e.rot);
+  } else polyPath(c, x, y, r, e.sidesOverride || d.sides, e.rot);
   polFill(c, e.pol, e.fl > 0, e.boss ? 3 : 2);
   if (d.half) { c.beginPath(); c.arc(x, y, r * .55, e.rot, e.rot + Math.PI); c.closePath(); c.fillStyle = PAL.pc[e.pol ^ 1]; c.fill(); }
   if (d.hole) {
@@ -282,9 +282,13 @@ function drawPlayer(c) {
   const P = R.P, s = P.stats, col = PAL.pc[P.pol];
   c.strokeStyle = rgba(col, .28); c.lineWidth = 1.5;
   c.beginPath(); c.arc(P.x, P.y, s.absorbR, 0, TAU); c.stroke();
-  if (P.charge > 0) {
-    c.strokeStyle = P.charge >= 20 ? '#fff' : rgba(col, .6); c.lineWidth = 3;
-    c.beginPath(); c.arc(P.x, P.y, s.absorbR + 5, -Math.PI / 2, -Math.PI / 2 + TAU * P.charge / s.chargeMax); c.stroke();
+  if (s.corona && chgFrac() >= .6) {
+    c.strokeStyle = rgba(col, .35 + .2 * Math.sin(G.t * 12)); c.lineWidth = 3; c.setLineDash([6, 9]); c.lineDashOffset = G.t * 60;
+    c.beginPath(); c.arc(P.x, P.y, s.absorbR * 2.6, 0, TAU); c.stroke(); c.setLineDash([]);
+  }
+  if (chg() > 0) {
+    c.strokeStyle = chg() >= 20 ? '#fff' : rgba(col, .6); c.lineWidth = 3;
+    c.beginPath(); c.arc(P.x, P.y, s.absorbR + 5, -Math.PI / 2, -Math.PI / 2 + TAU * chgFrac()); c.stroke();
   }
   if (P.lockT > 0) { c.strokeStyle = BAD; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 19, 0, TAU * P.lockT / s.flipLock); c.stroke(); }
   if (s.ghost && P.hist.length) {
@@ -395,7 +399,11 @@ function drawWorld(c) {
     c.globalAlpha = 1;
   }
   for (const m of R.mines) { polyPath(c, m.x, m.y, 7, 4, 0); polFill(c, R.P.pol, m.t > .4 && Math.sin(m.t * 14) > .6, 1.5); }
-  for (const e of R.enemies) drawEnemy(c, e);
+  for (const e of R.enemies) {
+    if (e.dummy) { c.globalAlpha = .5; c.setLineDash([5, 4]); }
+    drawEnemy(c, e);
+    c.globalAlpha = 1; c.setLineDash([]);
+  }
   drawBeams(c);
   drawShots(c);
   if (G.state !== 'dead') drawPlayer(c);
@@ -465,16 +473,19 @@ function drawMinimap(c) {
 
 function drawHUD(c) {
   const P = R.P, s = P.stats, col = PAL.pc[P.pol];
-  for (let i = 0; i < s.maxHp; i++) {
+  // while trying an upgrade, pips it would add blink green and pips it would cost blink red
+  const baseHp = P.preview ? computeStats(R.ship, P.ups).maxHp : s.maxHp;
+  for (let i = 0; i < Math.max(s.maxHp, baseHp); i++) {
     const x = 30 + (i % 12) * 24, y = 24 + Math.floor(i / 12) * 22;
     shipPath(c, R.ship.id, x, y, 9.5, -Math.PI / 2);
+    if (i >= s.maxHp || i >= baseHp) { if (Math.sin(G.t * 8) > 0) { c.strokeStyle = i >= s.maxHp ? BAD : GOOD; c.lineWidth = 2; c.stroke(); } continue; }
     if (i < P.hp) { c.fillStyle = HEART; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke(); } else { c.strokeStyle = rgba(HEART, .5); c.lineWidth = 1.5; c.stroke(); }
   }
   for (let i = 0; i < P.sh; i++) { c.strokeStyle = '#9fe8ff'; c.lineWidth = 2; polyPath(c, 30 + ((s.maxHp + i) % 12) * 24, 24, 8, 6, 0); c.stroke(); }
   // charge
-  const bw = 170 * Math.min(2, s.chargeMax / 100), f = P.charge / s.chargeMax;
+  const bw = 170 * Math.min(2, s.chargeMax / 100), f = chgFrac();
   c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 1; c.strokeRect(20.5, 44.5, bw, 7);
-  c.fillStyle = P.charge >= 20 ? col : rgba(col, .5); c.fillRect(21, 45, (bw - 1) * f, 6);
+  c.fillStyle = P.preview ? rgba(col, .6 + .4 * Math.sin(G.t * 8)) : P.charge >= 20 ? col : rgba(col, .5); c.fillRect(21, 45, (bw - 1) * f, 6);
   c.fillStyle = '#fff'; c.fillRect(20 + bw * 20 / s.chargeMax, 43, 1.5, 10);
   // chain pips
   for (let i = 0; i < 3; i++) {

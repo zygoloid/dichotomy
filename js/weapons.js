@@ -8,12 +8,19 @@
 const polMul = (pol, e) => pol !== e.pol ? R.P.stats.oppMul : R.P.stats.sameMul;
 const noHurt = pol => R.P.stats.sameMul <= 0 ? pol : undefined;
 
+// Charge as the weapon systems see it: bottomless while an upgrade is being tried on a pedestal.
+const chg = () => R.P.preview ? R.P.stats.chargeMax : R.P.charge;
+const chgFrac = () => chg() / R.P.stats.chargeMax;
+function spendCharge(n) { if (!R.P.preview) R.P.charge = Math.max(0, R.P.charge - n); }
+
 function shotDmg() {
   const P = R.P, s = P.stats;
   let d = s.dmg;
   if (s.kinetic) d *= 1 + s.kinetic * (hyp(P.vx, P.vy) > s.move * .5 ? .4 : -.2);
   if (s.berserk) d *= 1 + s.berserk * .2 * Math.max(0, s.maxHp - P.hp);
   d *= 1 + .06 * Math.min(P.chain, 8); // chain overdrive
+  if (s.dynamo) d *= 1 + .8 * s.dynamo * chgFrac();
+  if (s.vacuum) d *= 1 + .6 * s.vacuum * (1 - chgFrac());
   return Math.max(1, d);
 }
 
@@ -53,6 +60,7 @@ function fireVolley(ang) {
   if (s.rail && ++P.railN % 4 === 0) spawnShot(P.x, P.y, ang, { dmg: d * 3 * s.rail, pol: P.pol, size: 1.8, life: s.life * 1.6, rail: true });
   if (s.blade && P.bladeCd <= 0) slash(ang);
   if (s.recoil) { P.kx -= Math.cos(ang) * 130 * s.recoil; P.ky -= Math.sin(ang) * 130 * s.recoil; }
+  if (s.dynamo) spendCharge(1.5 * s.dynamo);
   AU.sfx('shoot');
 }
 
@@ -107,7 +115,7 @@ function updateSecondary(dt) {
       spawnShot(P.x, P.y, P.ang + Math.PI + rand(-.9, .9), { dmg: shotDmg() * 3, pol: P.pol, hom: 6, spd: 400, life: 3, size: 1.6, ex: 70, proj: true, burst: true });
   }
   if (s.mine) {
-    if ((P.mineCd -= dt) <= 0 && !R.room.cleared && hyp(P.vx, P.vy) > s.move * .3 && R.mines.length < 10) {
+    if ((P.mineCd -= dt) <= 0 && (!R.room.cleared || P.preview) && hyp(P.vx, P.vy) > s.move * .3 && R.mines.length < 10) {
       P.mineCd = 1.4 / s.mine; R.mines.push({ x: P.x, y: P.y, t: 0 });
     }
   }
@@ -140,6 +148,11 @@ function updateSecondary(dt) {
     for (const b of R.bullets) { const dx = o.x - b.x, dy = o.y - b.y, d = hyp(dx, dy); if (d < 210 && d > 1) { b.vx += dx / d * 520 * dt; b.vy += dy / d * 520 * dt; if (d < 14) b.dead = true; } }
     if (o.t > 2.6) { R.orbs.splice(i, 1); explodeAt(o.x, o.y, 125, shotDmg() * 6); fxRing(o.x, o.y, .08, 600, .6); fxShake(8); AU.sfx('boom'); }
   }
+  // corona: above 60% charge the ship scorches whatever is close
+  if (s.corona && chgFrac() >= .6) {
+    const rad = s.absorbR * 2.6, dps = s.dmg * s.rate * .5 * s.corona;
+    for (const e of R.enemies) if (!e.dead && e.spawn <= 0 && hyp(e.x - P.x, e.y - P.y) < rad + e.r) damageEnemy(e, dps * dt * polMul(P.pol, e));
+  }
   if (s.tesla && (P.teslaCd -= dt) <= 0) {
     const seen = new Set(); let fx = P.x, fy = P.y, d = shotDmg() * 1.2;
     for (let i = 0; i < 1 + s.tesla + s.chain; i++) {
@@ -153,13 +166,34 @@ function updateSecondary(dt) {
 }
 
 function releaseBurst() {
-  const P = R.P, s = P.stats;
-  if (P.charge < 20) { AU.sfx('deny'); return; }
-  const n = Math.max(2, Math.round(P.charge / 100 * 12 * s.burstN)), d = shotDmg() * 1.6 * s.burstDmg;
-  for (let i = 0; i < n; i++) spawnShot(P.x, P.y, P.ang + i * TAU / n, { dmg: d, pol: P.pol, hom: 7, spd: 520, life: Math.max(2.2, s.life), size: 1.5, burst: true, proj: true });
-  P.charge = 0;
-  R.st.bursts++; mAdd('bursts');
+  const P = R.P, s = P.stats, c = chg(), f = chgFrac();
+  if (c < 20) { AU.sfx('deny'); return false; }
+  const n = Math.max(2, Math.round(c / 100 * 12 * s.burstN)), d = shotDmg() * 1.6 * s.burstDmg * (1 + .25 * s.bfocus);
+  for (let i = 0; i < n; i++) {
+    // focus turns the ring into a forward cone
+    const a = s.bfocus ? P.ang + (n > 1 ? i / (n - 1) - .5 : 0) * .8 : P.ang + i * TAU / n;
+    spawnShot(P.x, P.y, a, { dmg: d, pol: P.pol, hom: 7, spd: 520, life: Math.max(2.2, s.life), size: 1.5, burst: true, proj: true });
+  }
+  if (s.bwave) {
+    // shockwave: the classic bomb, wiping bullets and shoving enemies back
+    const rad = (150 + 170 * f) * Math.sqrt(s.bwave);
+    for (const b of R.bullets) if (hyp(b.x - P.x, b.y - P.y) < rad) { b.dead = true; fxParts(b.x, b.y, PAL.pc[b.pol], 1, 120); }
+    for (const e of R.enemies) {
+      const dd = hyp(e.x - P.x, e.y - P.y) || 1;
+      if (e.dead || e.spawn > 0 || dd > rad + e.r) continue;
+      if (!e.boss) { e.vx += (e.x - P.x) / dd * 500; e.vy += (e.y - P.y) / dd * 500; }
+      damageEnemy(e, shotDmg() * 2.5 * s.bwave);
+    }
+    R.booms.push({ x: P.x, y: P.y, r: rad, t: 0 }); fxRing(P.x, P.y, .1, rad * 4, .4);
+  }
+  if (s.bpolar) {
+    const rad = 220 + 160 * s.bpolar;
+    for (const b of R.bullets) if (!b.fix && b.pol !== P.pol && hyp(b.x - P.x, b.y - P.y) < rad) { b.pol = P.pol; fxParts(b.x, b.y, PAL.pc[b.pol], 1, 80); }
+  }
+  if (s.baegis) P.inv = Math.max(P.inv, (.6 + 1.2 * f) * s.baegis);
+  if (!P.preview) { P.charge = 0; R.st.bursts++; mAdd('bursts'); }
   fxRing(P.x, P.y, .07, 700, .7); fxShake(8); AU.sfx('burst');
+  return true;
 }
 
 // pol: the colour of the blast, if it came from a shot; colourless blasts hurt everything
@@ -247,6 +281,7 @@ function stepShot(sh, dt, scan) {
   }
   if (s.wave) { const lat = sh.sgn * 196 * s.wave * Math.cos(14 * sh.t); vx -= Math.sin(sh.ang) * lat; vy += Math.cos(sh.ang) * lat; }
   sh.x += vx * dt; sh.y += vy * dt;
+  for (const fd of R.room.fields) if ((sh.x - fd.x) * (sh.x - fd.x) + (sh.y - fd.y) * (sh.y - fd.y) < fd.r * fd.r) sh.pol = fd.pol;
   if (R.flow) { sh.x += R.flow.x * 80 * dt; sh.y += R.flow.y * 80 * dt; }
   // walls and blocks
   let nx = 0, ny = 0;
