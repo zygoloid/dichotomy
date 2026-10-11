@@ -1,6 +1,10 @@
 'use strict';
 // Procedural audio: every sound is synthesised. Music is a step sequencer driven by
 // the game's beat clock, so gameplay that keys off the beat stays in sync with it.
+// One bar of melody as text: numbers are scale degrees counted from the tonic two octaves below
+// the lead's range (7 = tonic, 9 = third, 11 = fifth, 14 = tonic above); "." rests, "-" ties.
+const _bar = t => t.split(' ').map(x => x === '.' ? -1 : x === '-' ? -2 : +x);
+
 const AU = {
   ctx: null, out: null, nbuf: null, mute: false, last: {},
   init() {
@@ -84,6 +88,8 @@ const AU = {
   //   gate   rhythm that chops the supersaw chord (the "trance gate"), 0..1 per step
   //   arp    pluck line, scale steps above the chord root
   //   leadA/leadB  melody (B on every fourth bar): scale steps above the chord root, -1 rest, -2 tie
+  //   mel/melB/melP  instead of leadA.., a through-written 8-bar melody in absolute scale degrees
+  //                  (see _bar): mel for the base phrase, melB its variation, melP over progB
   // Each song runs a 64-bar cycle of four 16-bar phrases: the base patterns; the *B patterns
   // with leadC/leadD; the base patterns over progB; then both together, lifted by `lift`
   // semitones where the song has one.
@@ -93,14 +99,20 @@ const AU = {
       bass: [-1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, 0],
       gate: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1],
       arp: [7, -1, -1, 4, -1, -1, 2, -1, 7, -1, -1, 4, -1, -1, 9, -1],
-      leadA: [4, -2, -2, 4, -2, 2, -2, -1, 4, -2, -2, 7, -2, -2, 4, -2],
-      leadB: [4, -2, -2, 4, -2, 2, -2, -1, 0, -2, 2, -2, 4, -2, 6, -2],
+      mel: [ // E C D E C A | E C D C | C A C D C A | C A F A | E C E G E C | E C D E | D B D G D B | D B G B, D E
+        '11 - - 9 - - 10 - 11 - - 9 - - 7 -', '11 - - 9 - - 10 - 9 - - - . . . .',
+        '9 - - 7 - - 9 - 10 - - 9 - - 7 -', '9 - - 7 - - 5 - 7 - - - . . . .',
+        '11 - - 9 - - 11 - 13 - - 11 - - 9 -', '11 - - 9 - - 10 - 11 - - - . . . .',
+        '10 - - 8 - - 10 - 13 - - 10 - - 8 -', '10 - - 8 - - 6 - 8 - - . 10 - 11 -'].map(_bar),
+      melB: [ // the same harmony in longer breaths
+        '14 - - - - - 13 - 11 - - - - - 9 -', '10 - - - 11 - - - 9 - - - . . 7 -',
+        '12 - - - - - 10 - 9 - - - - - 7 -', '9 - - - 10 - - - 12 - - - . . 9 -',
+        '13 - - - - - 11 - 9 - - - - - 11 -', '13 - - - 11 - - - 9 - - - . . 11 -',
+        '13 - - - - - 10 - 8 - - - - - 10 -', '8 - - - 10 - - - 11 - 10 - 8 - 6 -'].map(_bar),
       lift: 2, progB: [0, 2, 6, 5],
       bassB: [-1, -1, 0, -1, -1, -1, 7, -1, -1, -1, 0, -1, -1, -1, 7, 0],
       gateB: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
-      arpB: [0, -1, 4, -1, 7, -1, 4, -1, 9, -1, 7, -1, 4, -1, 2, -1],
-      leadC: [7, -2, -2, -1, 6, -2, 4, -2, -2, -1, 2, -2, 4, -2, -2, -1],
-      leadD: [7, -2, -2, -1, 6, -2, 4, -2, 2, -2, 4, -2, 6, -2, 7, -2] },
+      arpB: [0, -1, 4, -1, 7, -1, 4, -1, 9, -1, 7, -1, 4, -1, 2, -1] },
     { // acid techno, G phrygian: one chord with a flat-second turn, squelching 303 line
       root: 49, scale: [0, 1, 3, 5, 7, 8, 10], prog: [0, 0, 0, 1], cb: 2, bassW: 'sawtooth', bassLen: 1.4, bassCut: 200, arpW: 'square',
       bass: [-1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1],
@@ -120,27 +132,39 @@ const AU = {
       bass: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0],
       gate: [0, 0, 0, .6, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
       arp: [-1, -1, 7, -1, -1, 7, -1, -1, 9, -1, -1, 7, -1, -1, -1, -1],
-      leadA: [4, -2, -2, -2, -2, -2, -2, -2, 3, -2, -2, -2, -2, -2, -2, -1],
-      leadB: [7, -2, -2, -2, -2, -2, -2, -2, 6, -2, -2, -2, 4, -2, -2, -1],
+      leadW: 'square',
+      mel: [ // call (E E D B) and answer (B B G E) over Em, shifted down over the D chord
+        '. . 14 . . 14 . 13 . . 11 . . . . .', '. . 14 . . 14 . 13 . . 11 . 9 . 11 .',
+        '. . 11 . . 11 . 9 . . 7 . . . . .', '. . 11 . . 11 . 9 . . 7 . 6 . 7 .',
+        '. . 13 . . 13 . 11 . . 10 . . . . .', '. . 13 . . 13 . 11 . . 10 . 8 . 10 .',
+        '. . 14 . . 14 . 13 . . 11 . . . . .', '. . 11 . . 11 . 9 . . 7 . 6 . 7 .'].map(_bar),
+      melB: [ // busier: a sixteenth-note burst, then space
+        '14 . 14 13 . 11 . . 14 . 14 13 . 11 9 .', '. . . . . . . . 11 . 9 . 7 . . .',
+        '14 . 14 13 . 11 . . 14 . 14 13 . 11 9 .', '. . . . . . . . 11 . 9 . 7 . . .',
+        '13 . 13 11 . 10 . . 13 . 13 11 . 10 8 .', '. . . . . . . . 10 . 8 . 6 . . .',
+        '14 . 14 13 . 11 . . 14 . 14 13 . 11 9 .', '. . . . . . . . 11 . 9 . 7 . . .'].map(_bar),
+      melP: [ // over Em Em Am D
+        '. . 14 . . 14 . 13 . . 11 . . . . .', '. . 14 . . 14 . 13 . . 11 . 9 . 11 .',
+        '. . 11 . . 11 . 9 . . 7 . . . . .', '. . 11 . . 11 . 9 . . 7 . 6 . 7 .',
+        '. . 14 . . 14 . 12 . . 10 . . . . .', '. . 14 . . 14 . 12 . . 10 . 9 . 10 .',
+        '. . 13 . . 13 . 11 . . 10 . . . . .', '. . 13 . . 13 . 11 . . 10 . 8 . 10 .'].map(_bar),
       progB: [0, 0, 3, 6],
       bassB: [-1, 0, 0, 0, -1, 0, 0, 3, -1, 0, 0, 0, -1, 0, 5, 3],
       gateB: [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, .6, 0, 0],
-      arpB: [7, -1, -1, -1, -1, -1, 9, -1, -1, 7, -1, -1, -1, -1, 4, -1],
-      leadC: [2, -2, -2, -2, -2, -2, -2, -2, 4, -2, -2, -2, -2, -2, -2, -1],
-      leadD: [4, -2, -2, -2, 6, -2, -2, -2, 7, -2, -2, -2, -2, -2, -2, -1] },
+      arpB: [7, -1, -1, -1, -1, -1, 9, -1, -1, 7, -1, -1, -1, -1, 4, -1] },
     { // uplifting trance, F# minor: VI-VII-i-i, rolling bass, full gate, soaring lead
       root: 46.25, scale: [0, 2, 3, 5, 7, 8, 10], prog: [5, 6, 0, 0], cb: 2, bassW: 'sawtooth', bassLen: .9, bassCut: 380, arpW: 'sawtooth',
       bass: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 7],
       gate: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1],
       arp: [0, 2, 4, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 4, 7],
-      leadA: [7, -2, -2, 6, -2, -2, 4, -2, 2, -2, -2, 4, -2, -2, -2, -1],
-      leadB: [7, -2, -2, 6, -2, -2, 4, -2, 9, -2, -2, 7, -2, 6, 4, -2],
+      leadA: [7, -2, -2, 5, -2, -2, 4, -2, 2, -2, -2, 4, -2, -2, -2, -1],
+      leadB: [7, -2, -2, 5, -2, -2, 4, -2, 9, -2, -2, 7, -2, 5, 4, -2],
       lift: 2, progB: [0, 5, 2, 6],
       bassB: [-1, 0, 0, 0, -1, 0, 7, 0, -1, 0, 0, 0, -1, 7, 0, 7],
       gateB: [1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1],
       arpB: [7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 0, 2, 4, 7, 4],
-      leadC: [4, -2, -2, -2, 6, -2, 7, -2, -2, -2, 9, -2, 7, -2, -2, -1],
-      leadD: [4, -2, -2, -2, 6, -2, 7, -2, 11, -2, -2, 9, -2, 7, 6, -2] },
+      leadC: [4, -2, -2, -2, 5, -2, 7, -2, -2, -2, 9, -2, 7, -2, -2, -1],
+      leadD: [4, -2, -2, -2, 5, -2, 7, -2, 11, -2, -2, 9, -2, 7, 5, -2] },
     { // psy / hard trance, G# phrygian dominant: galloping bass, stepwise goa runs
       root: 51.9, scale: [0, 1, 4, 5, 7, 8, 10], prog: [0, 0, 1, 0], cb: 2, bassW: 'square', bassLen: .8, bassCut: 500, arpW: 'sawtooth',
       bass: [-1, -1, 0, 0, -1, 0, 0, 7, -1, -1, 0, 0, -1, 0, 7, 0],
@@ -248,7 +272,8 @@ const AU = {
     const hz = (d, oct) => M.root * lift * Math.pow(2, oct + (M.scale[((d % n) + n) % n] + 12 * Math.floor(d / n)) / 12);
     const prog = (P4 >= 2 && M.progB) || M.prog, c0 = prog[Math.floor(bar / M.cb) % prog.length], cm = c0 > 4 ? c0 - 7 : c0; // keep chords near the tonic
     const sweep = .5 - .5 * Math.cos((bar % 8 + s / 16) / 8 * Math.PI * 2); // 8-bar filter sweep, 0..1
-    const lead = V ? (bar % 4 === 3 ? M.leadD : M.leadC) : (bar % 4 === 3 ? M.leadB : M.leadA);
+    const lead = M.mel ? ((P4 >= 2 && M.melP) || (V && M.melB) || M.mel)[bar % 8]
+      : V ? (bar % 4 === 3 ? M.leadD : M.leadC) : (bar % 4 === 3 ? M.leadB : M.leadA);
     this.dly.delayTime.setValueAtTime(sd * 3, t);
 
     // --- drums: four on the floor, clap on 2 and 4, open hat on every off-beat
@@ -300,9 +325,10 @@ const AU = {
     const L = lead ? lead[s] : -1;
     if (L >= 0 && (full || (level === 0 && bar % 8 >= 4)) && !build) {
       let len = 1; while (s + len < 16 && lead[s + len] === -2) len++;
-      const f = hz(cm + L, 3), v = level ? .1 : .06, o = { cut: 1800 + 3500 * sweep, cut2: 900, q: 1.5, hold: .6, dly: true, rev: true };
-      for (const det of [-11, 0, 11]) this.voice('sawtooth', f, t, sd * (len + .4), v, this.duck, Object.assign({ det }, o));
+      const f = M.mel ? hz(L, 2) : hz(cm + L, 3), v = level ? .1 : .06, o = { cut: 1800 + 3500 * sweep, cut2: 900, q: 1.5, hold: .6, dly: true, rev: true };
+      for (const det of [-11, 0, 11]) this.voice(M.leadW || 'sawtooth', f, t, sd * (len + .4), v, this.duck, Object.assign({ det }, o));
       if (level > 1) this.voice('square', f * 2, t, sd * (len + .2), .03, this.duck, o);
     }
   }
 };
+AU.MUS[0].melP = [0, 1, 4, 5, 6, 7, 2, 3].map(i => AU.MUS[0].mel[i]);
