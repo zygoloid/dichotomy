@@ -17,6 +17,68 @@ function dropShards(x, y, n) {
 }
 function toast(list) { for (const u of list) { G.toasts.push({ u, t: 0 }); G.newUn.push(u); } }
 
+// ---------------------------------------------------------------- teleporters
+const inWrap = y => R.room.wraps.some(w => y > w.y0 && y < w.y1);
+// Carry o through a wall link or a wormhole if it has reached one. Leaving a wormhole, o keeps its
+// offset from the centre, so it crosses the far hole's disc and comes out the other side; o.tp
+// marks the hole it is emerging from so it is not sent straight back.
+function teleport(o) {
+  const room = R.room, hs = room.holes;
+  if (room.wraps.length && (o.x < BX0 || o.x > BX1) && inWrap(o.y)) { o.x += o.x < BX0 ? BX1 - BX0 : BX0 - BX1; return true; }
+  if (!hs.length) return false;
+  if (o.tp != null) { const h = hs[o.tp]; if (h && hyp(o.x - h.x, o.y - h.y) <= h.r + 2) return false; o.tp = null; }
+  for (let k = 0; k < hs.length; k++) {
+    const h = hs[k];
+    if (hyp(o.x - h.x, o.y - h.y) >= h.r) continue;
+    const t = hs[h.to]; o.x += t.x - h.x; o.y += t.y - h.y; o.tp = h.to;
+    return true;
+  }
+  return false;
+}
+// Direction and distance from a point to the pilot by the shortest route, teleporters included,
+// so pulls and pushes act through them.
+const _tv = { x: 0, y: 0, d: 0 };
+function toPilot(x, y) {
+  const P = R.P, room = R.room, dx = P.x - x, dy = P.y - y;
+  let d = hyp(dx, dy) || 1, bx = dx / d, by = dy / d;
+  for (const w of room.wraps) if (y > w.y0 && y < w.y1 && P.y > w.y0 && P.y < w.y1) {
+    const ax = dx > 0 ? dx - (BX1 - BX0) : dx + (BX1 - BX0), a = hyp(ax, dy);
+    if (a < d) { d = a; bx = ax / a; by = dy / a; }
+  }
+  for (const h of room.holes) {
+    const t = room.holes[h.to], a = hyp(h.x - x, h.y - y);
+    if (a > 1 && a + hyp(P.x - t.x, P.y - t.y) < d) { d = a + hyp(P.x - t.x, P.y - t.y); bx = (h.x - x) / a; by = (h.y - y) / a; }
+  }
+  _tv.x = bx; _tv.y = by; _tv.d = d;
+  return _tv;
+}
+
+// a burst-only barrier or crate gives way; crates sometimes hold something
+function breakBlock(o) {
+  const room = R.room, i = room.obs.indexOf(o);
+  if (i < 0) return;
+  room.obs.splice(i, 1); room.navB = null;
+  const x = o.x + o.w / 2, y = o.y + o.h / 2;
+  fxParts(x, y, PAL.wall, 26, 320); fxRing(x, y, .04, 500, .4); fxShake(6); AU.sfx('kill');
+  if (o.crate && chance(.45)) {
+    const k = Math.random();
+    if (k < .5) dropShards(x, y, randi(2, 3)); else R.pickups.push({ x, y, kind: k < .85 ? 'cell' : 'heart', t: 0 });
+  }
+}
+
+// moving blocks, saws and switch cooldowns
+function updateFurniture(dt) {
+  const room = R.room, P = R.P;
+  const at = m => .5 - .5 * Math.cos((R.time / m.per + m.ph) * TAU);
+  for (const o of room.obs) if (o.mv) { const k = at(o.mv); o.x = lerp(o.mv.ax, o.mv.bx, k); o.y = lerp(o.mv.ay, o.mv.by, k); }
+  for (const sw of room.switches) if (sw.cd > 0) sw.cd -= dt;
+  for (const sa of room.saws) {
+    const k = at(sa); sa.x = lerp(sa.ax, sa.bx, k); sa.y = lerp(sa.ay, sa.by, k);
+    if (hyp(P.x - sa.x, P.y - sa.y) < sa.r + P.stats.hitR) hurtPlayer();
+  }
+  updateNav();
+}
+
 // ---------------------------------------------------------------- run setup
 function newRun() {
   const ship = SHIPS.find(s => s.id === META.ship && (s.id === 'tri' || META.un['ship:' + s.id])) || SHIPS[0];
@@ -63,7 +125,7 @@ function enterRoom(room, dir) {
   R.shots = []; R.bullets = []; R.enemies = []; R.arcs = []; R.booms = []; R.mines = []; R.trails = [];
   R.pickups = room.pickups; R.flipRule = false; R.line = null; P.vq = [];
   if (dir) { const d = DOOR_POS[OPP[dir]]; P.x = d[0] + DIRV[dir][0] * 34; P.y = d[1] + DIRV[dir][1] * 34; }
-  P.kx = P.ky = 0; P.hit = false;
+  P.kx = P.ky = 0; P.hit = false; P.tp = null; R.nav = null; R.navT = -9;
   for (const d of P.drones) { d.x = P.x; d.y = P.y; }
   R.orbs = []; R.slashes = []; P.hist = []; P.fl.x = P.x; P.fl.y = P.y; P.fl.vx = P.fl.vy = 0;
   room.visited = room.seen = true;
@@ -88,7 +150,7 @@ function spawnWave(wave) {
     for (let g = 0; g < 30; g++) {
       x = rand(BX0 + 50, BX1 - 50); y = rand(BY0 + 50, BY1 - 50);
       if (hyp(x - P.x, y - P.y) < 230) continue;
-      if (R.room.obs.some(o => circRect(x, y, 26, o))) continue;
+      if (R.room.obs.concat(R.room.gates, R.room.noSpawn).some(o => circRect(x, y, 26, o))) continue;
       break;
     }
     const e = makeEnemy(w.type, x, y, w.pol, R.asc >= 4 ? .6 : .9);
@@ -249,15 +311,17 @@ function updatePlayer(dt) {
   if (R.flow) { px += R.flow.x * 75; py += R.flow.y * 75; }
   P.x += (P.vx + P.kx + px) * dt; P.y += (P.vy + P.ky + py) * dt;
   P.still = hyp(P.vx, P.vy) < s.move * .2 ? P.still + dt : 0;
-  for (const o of room.obs) { const h = circRect(P.x, P.y, 12, o); if (h) { P.x += h.x; P.y += h.y; } }
+  for (const o of room.obs) { const h = circRect(P.x, P.y, 12, o); if (h) { P.x += h.x; P.y += h.y; if (o.hot) hurtPlayer(); } }
   for (const g of room.gates) if (g.pol !== P.pol) { const h = circRect(P.x, P.y, 12, g); if (h) { P.x += h.x; P.y += h.y; } }
   // walls, with gaps where doors are open
   const pr = 12, open = room.cleared, D = room.doors;
   const gy = Math.abs(P.y - H / 2) < 32, gx = Math.abs(P.x - W / 2) < 32;
-  if (P.x < BX0 + pr && !(open && D.w && gy)) P.x = BX0 + pr;
-  if (P.x > BX1 - pr && !(open && D.e && gy)) P.x = BX1 - pr;
+  const wr = inWrap(P.y); // a linked stretch of wall is open to walk through
+  if (P.x < BX0 + pr && !wr && !(open && D.w && gy)) P.x = BX0 + pr;
+  if (P.x > BX1 - pr && !wr && !(open && D.e && gy)) P.x = BX1 - pr;
   if (P.y < BY0 + pr && !(open && D.n && gx)) P.y = BY0 + pr;
   if (P.y > BY1 - pr && !(open && D.s && gx)) P.y = BY1 - pr;
+  teleport(P);
   if (P.x < BX0 - 26) return enterRoom(D.w, 'w');
   if (P.x > BX1 + 26) return enterRoom(D.e, 'e');
   if (P.y < BY0 - 26) return enterRoom(D.n, 'n');
@@ -302,6 +366,7 @@ function updateBullets(dt) {
     }
     b.x += b.vx * dt; b.y += b.vy * dt;
     if (R.flow) { b.x += R.flow.x * 60 * dt; b.y += R.flow.y * 60 * dt; }
+    teleport(b);
     if (b.x < BX0 || b.x > BX1 || b.y < BY0 || b.y > BY1) {
       if (b.bn <= 0 || b.t < .3) { b.dead = true; continue; }
       b.bn--; // ricochet
@@ -318,8 +383,9 @@ function updateBullets(dt) {
     for (const g of R.room.gates) if (g.pol !== b.pol && b.x > g.x && b.x < g.x + g.w && b.y > g.y && b.y < g.y + g.h) { b.dead = true; fxParts(b.x, b.y, PAL.pc[g.pol], 1, 80); break; }
     if (b.dead) continue;
     const dx = b.x - P.x, dy = b.y - P.y, d2 = dx * dx + dy * dy;
-    if (s.repel && b.pol !== P.pol && d2 < 130 * 130 && d2 > 1) { // a gentle shove: it bends paths, it does not stop them
-      const d = Math.sqrt(d2), f = 260 * s.repel * (1 - d / 130) * dt; b.vx += dx / d * f; b.vy += dy / d * f;
+    if (s.repel && b.pol !== P.pol) { // a gentle shove: it bends paths, it does not stop them
+      const tv = toPilot(b.x, b.y);
+      if (tv.d < 130 && tv.d > 1) { const f = 260 * s.repel * (1 - tv.d / 130) * dt; b.vx -= tv.x * f; b.vy -= tv.y * f; }
     }
     if (b.pol === P.pol) { if (d2 < (aR + b.r) * (aR + b.r)) absorbBullet(b); }
     else if (d2 < (hR + b.r * .6) * (hR + b.r * .6)) { b.dead = true; hurtPlayer(); }
@@ -333,19 +399,23 @@ function updateBullets(dt) {
 }
 
 function updatePickups(dt) {
-  const P = R.P, s = P.stats, list = R.pickups;
+  const P = R.P, s = P.stats, list = R.pickups, obs = R.room.obs;
   for (let i = list.length - 1; i >= 0; i--) {
     const p = list[i]; p.t += dt;
+    if (p.lock) { if (obs.includes(p.lock)) continue; p.lock = null; } // sealed in a vault
     if (p.vx) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .9; p.vy *= .9; }
-    const dx = P.x - p.x, dy = P.y - p.y, d = hyp(dx, dy) || 1;
-    if (p.kind === 'heart' && P.hp >= s.maxHp) { p.x = clamp(p.x, BX0 + 20, BX1 - 20); p.y = clamp(p.y, BY0 + 20, BY1 - 20); continue; }
-    if (d < s.magnet && p.t > .3) { const v = 520 * (1 - d / s.magnet) + 120; p.x += dx / d * v * dt; p.y += dy / d * v * dt; }
-    p.x = clamp(p.x, BX0 + 12, BX1 - 12); p.y = clamp(p.y, BY0 + 12, BY1 - 12);
-    if (d < 20) {
-      if (p.kind === 'shard') { P.shards++; R.st.shards++; mAdd('shards'); }
-      else heal(1);
-      AU.sfx('pick'); list.splice(i, 1);
+    if (!(p.kind === 'heart' && P.hp >= s.maxHp)) {
+      const tv = toPilot(p.x, p.y); // the magnet reaches through teleporters
+      if (tv.d < s.magnet && p.t > .3) { const v = 520 * (1 - tv.d / s.magnet) + 120; p.x += tv.x * v * dt; p.y += tv.y * v * dt; }
     }
+    teleport(p);
+    if (!inWrap(p.y)) p.x = clamp(p.x, BX0 + 12, BX1 - 12);
+    p.y = clamp(p.y, BY0 + 12, BY1 - 12);
+    if (hyp(P.x - p.x, P.y - p.y) >= 20 || (p.kind === 'heart' && P.hp >= s.maxHp)) continue;
+    if (p.kind === 'shard') { P.shards++; R.st.shards++; mAdd('shards'); }
+    else if (p.kind === 'cell') addCharge(s.chargeMax); // a full ring of charge
+    else heal(1);
+    AU.sfx('pick'); list.splice(i, 1);
   }
 }
 
@@ -418,6 +488,7 @@ function updateFx(dt) {
 function update(dt) {
   const P = R.P;
   R.time += dt;
+  updateFurniture(dt);
   R.beat = R.time * PAL.bpm / 60;
   const step = Math.floor(R.beat * 4);
   if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0, PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }

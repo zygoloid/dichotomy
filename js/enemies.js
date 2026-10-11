@@ -20,7 +20,55 @@ function eb(x, y, a, spd, pol, r, o) {
 }
 function ering(e, n, spd, off, pol, r, o) { for (let i = 0; i < n; i++) eb(e.x, e.y, off + i * TAU / n, spd, pol === undefined ? e.pol : pol, r, o); }
 function efan(e, n, arc, a, spd, pol, r, o) { for (let i = 0; i < n; i++) eb(e.x, e.y, a + (n > 1 ? (i / (n - 1) - .5) * arc : 0), spd, pol === undefined ? e.pol : pol, r, o); }
+// ---- pathfinding: a distance-to-pilot field over a coarse grid, so chasers can thread mazes
+const NAV = 40, NC = Math.ceil((BX1 - BX0) / NAV), NQ = Math.ceil((BY1 - BY0) / NAV);
+const navCell = (x, y) => clamp(Math.floor((x - BX0) / NAV), 0, NC - 1) + clamp(Math.floor((y - BY0) / NAV), 0, NQ - 1) * NC;
+function updateNav() {
+  const room = R.room;
+  if (!room.obs.length) { R.nav = null; return; }
+  if (R.nav && R.time - R.navT < .25) return;
+  R.navT = R.time;
+  if (!room.navB) { // cells too close to a fixed block to stand in
+    const b = room.navB = new Uint8Array(NC * NQ);
+    for (let q = 0; q < NQ; q++) for (let c = 0; c < NC; c++) {
+      const x = BX0 + (c + .5) * NAV, y = BY0 + (q + .5) * NAV;
+      for (const o of room.obs) if (!o.mv && x > o.x - 18 && x < o.x + o.w + 18 && y > o.y - 18 && y < o.y + o.h + 18) { b[c + q * NC] = 1; break; }
+    }
+  }
+  const b = room.navB, d = R.nav || (R.nav = new Int16Array(NC * NQ)), queue = [navCell(R.P.x, R.P.y)];
+  d.fill(-1); d[queue[0]] = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const k = queue[i], c = k % NC, q = (k / NC) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dx, nq = q + dy, nk = nc + nq * NC;
+      if (nc < 0 || nq < 0 || nc >= NC || nq >= NQ || d[nk] >= 0 || b[nk]) continue;
+      d[nk] = d[k] + 1; queue.push(nk);
+    }
+  }
+}
+// where a chaser should head: straight at the pilot if nothing is in the way, else the next cell along
+const _np = { x: 0, y: 0 };
+function navPoint(e) {
+  const P = R.P, b = R.room.navB;
+  if (!R.nav || !b) return P;
+  const n = Math.ceil(hyp(P.x - e.x, P.y - e.y) / 28);
+  let clear = true;
+  for (let i = 1; i < n && clear; i++) if (b[navCell(lerp(e.x, P.x, i / n), lerp(e.y, P.y, i / n))]) clear = false;
+  if (clear) return P;
+  const k = navCell(e.x, e.y), c = k % NC, q = (k / NC) | 0;
+  let best = -1, bd = R.nav[k] < 0 ? 1e9 : R.nav[k];
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const nc = c + dx, nq = q + dy, nk = nc + nq * NC;
+    if (nc < 0 || nq < 0 || nc >= NC || nq >= NQ || R.nav[nk] < 0 || R.nav[nk] >= bd) continue;
+    bd = R.nav[nk]; best = nk;
+  }
+  if (best < 0) return P;
+  _np.x = BX0 + (best % NC + .5) * NAV; _np.y = BY0 + (((best / NC) | 0) + .5) * NAV;
+  return _np;
+}
+
 function moveTo(e, tx, ty, spd, dt, k) {
+  if (tx === R.P.x && ty === R.P.y && R.nav) { const p = navPoint(e); tx = p.x; ty = p.y; }
   const a = Math.atan2(ty - e.y, tx - e.x), d = hyp(tx - e.x, ty - e.y), s = Math.min(spd, d * 3), f = Math.min(1, (k || 3) * dt);
   e.vx = lerp(e.vx, Math.cos(a) * s, f); e.vy = lerp(e.vy, Math.sin(a) * s, f);
 }
@@ -61,7 +109,7 @@ E('spinner', {
 E('swarm', {
   hp: 9, r: 9, sides: 3, cost: 1, min: 0, group: 4,
   ai(e, dt) {
-    const a = aimP(e) + Math.sin(e.t * 4 + e.id) * .9;
+    const np = navPoint(e), a = Math.atan2(np.y - e.y, np.x - e.x) + Math.sin(e.t * 4 + e.id) * .9;
     e.vx = lerp(e.vx, Math.cos(a) * 175, 2 * dt); e.vy = lerp(e.vy, Math.sin(a) * 175, 2 * dt);
     e.rot = Math.atan2(e.vy, e.vx);
   }
@@ -484,7 +532,9 @@ function updateEnemies(dt) {
     e.t += d;
     e.def.ai(e, d);
     e.x += e.vx * d; e.y += e.vy * d;
-    e.x = clamp(e.x, BX0 + e.r, BX1 - e.r); e.y = clamp(e.y, BY0 + e.r, BY1 - e.r);
+    if (e.boss || !inWrap(e.y)) e.x = clamp(e.x, BX0 + e.r, BX1 - e.r);
+    e.y = clamp(e.y, BY0 + e.r, BY1 - e.r);
+    if (!e.boss) teleport(e);
     if (!e.boss) for (const o of R.room.obs) { const h = circRect(e.x, e.y, e.r, o); if (h) { e.x += h.x; e.y += h.y; } }
     if (hyp(P.x - e.x, P.y - e.y) < e.r * .85 + P.stats.hitR) hurtPlayer();
     if (e.beams) for (const b of e.beams) {

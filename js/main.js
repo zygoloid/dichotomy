@@ -31,7 +31,9 @@
       else if (hash.includes('boss')) enterRoom(R.floor.rooms.find(r => r.type === 'boss'), null);
       else {
         const want = (/room=([a-z]+)/.exec(hash) || [])[1] || (hash.includes('treasure') ? 'treasure' : 'fight');
-        enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length) && (!hash.includes('current') || r.flow)) || R.floor.start, null);
+        const lay = (/layout=([a-z]+)/.exec(hash) || [])[1]; // reroll the floor until it has the requested layout
+        for (let i = 0; lay && i < 60 && !R.floor.rooms.some(r => r.layout === lay); i++) startStage(R.stage);
+        enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length) && (!hash.includes('current') || r.flow) && (!/layout=/.test(hash) || r.layout === /layout=([a-z]+)/.exec(hash)[1]) && (!hash.includes('holes') || r.holes.length) && (!hash.includes('wraps') || r.wraps.length)) || R.floor.start, null);
       }
       G.god = true;
       if (hash.includes('pause')) setTimeout(() => { G.state = 'pause'; }, 300);

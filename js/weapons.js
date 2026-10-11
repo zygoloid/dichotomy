@@ -189,6 +189,8 @@ function releaseBurst() {
   const P = R.P, s = P.stats, c = Math.min(chg(), s.chargeMax), f = c / s.chargeMax;
   if (c < 20) { AU.sfx('deny'); return false; }
   const n = Math.max(2, Math.round(c / 100 * 12 * s.burstN)), d = shotDmg() * 1.6 * s.burstDmg * (1 + .25 * s.bfocus);
+  for (const o of R.room.obs.filter(q => q.burst)) // the burst shatters barriers and crates nearby
+    if (hyp(clamp(P.x, o.x, o.x + o.w) - P.x, clamp(P.y, o.y, o.y + o.h) - P.y) < 240) breakBlock(o);
   if (s.detonate) for (const sh of R.shots) { // every shot in flight goes off where it is
     if (sh.dead) continue;
     explodeAt(sh.x, sh.y, 55, sh.dmg * 1.5 * s.detonate, null, sh.pol); sh.dead = true;
@@ -310,12 +312,18 @@ function stepShot(sh, dt, scan) {
   sh.x += vx * dt; sh.y += vy * dt;
   for (const fd of R.room.fields) if ((sh.x - fd.x) * (sh.x - fd.x) + (sh.y - fd.y) * (sh.y - fd.y) < fd.r * fd.r) sh.pol = fd.pol;
   if (R.flow) { sh.x += R.flow.x * 80 * dt; sh.y += R.flow.y * 80 * dt; }
+  teleport(sh);
+  for (const sw of R.room.switches) if (sw.cd <= 0 && hyp(sw.x - sh.x, sw.y - sh.y) < 16 + sh.r) { // a hit swaps every gate's colour
+    sw.cd = .5; for (const g of R.room.gates) g.pol ^= 1;
+    fxRing(sw.x, sw.y, .03, 500, .4); AU.sfx('swap');
+    if (sh.pierce > 0) sh.pierce--; else { killShot(sh); return; }
+  }
   // walls and blocks
   let nx = 0, ny = 0;
   if (sh.x < BX0) { nx = 1; sh.x = BX0; } else if (sh.x > BX1) { nx = -1; sh.x = BX1; }
   if (sh.y < BY0) { ny = 1; sh.y = BY0; } else if (sh.y > BY1) { ny = -1; sh.y = BY1; }
   if ((nx || ny) && R.room.hidden) hitSecret(sh);
-  if (!nx && !ny && !s.phase) for (const o of R.room.obs) { const h = circRect(sh.x, sh.y, sh.r, o); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; break; } }
+  if (!nx && !ny && !s.phase) for (const o of R.room.obs) { const h = circRect(sh.x, sh.y, sh.r, o); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; if (o.burst && sh.burst) breakBlock(o); break; } }
   if (!nx && !ny && !s.phase) for (const g of R.room.gates) if (g.pol !== sh.pol) { const h = circRect(sh.x, sh.y, sh.r, g); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; break; } }
   if (nx || ny) {
     if (sh.bounce <= 0) { killShot(sh); return; }
@@ -358,9 +366,16 @@ function updateShots(dt) {
     if (!sh.beam) { stepShot(sh, dt, scan); continue; }
     // beam: run the whole flight now and keep the path as a fading trail
     const step = Math.max(sh.life / 400, Math.min(1 / 90, 7 / sh.spd)), pts = [sh.x, sh.y];
-    for (let i = 0; !sh.dead && i < 420; i++) { stepShot(sh, step, scan); if (i % 2 || sh.dead) pts.push(sh.x, sh.y); }
+    const trail = p => { if (p.length >= 4 && R.trails.length < 160) R.trails.push({ pts: p, pol: sh.pol, w: Math.max(2, sh.r * .8), t: 0 }); };
+    let cur = pts;
+    for (let i = 0; !sh.dead && i < 420; i++) {
+      const px = sh.x, py = sh.y;
+      stepShot(sh, step, scan);
+      if (hyp(sh.x - px, sh.y - py) > 60) { trail(cur); cur = [sh.x, sh.y]; } // it teleported: start a new piece
+      else if (i % 2 || sh.dead) cur.push(sh.x, sh.y);
+    }
     killShot(sh);
-    if (R.trails.length < 160) R.trails.push({ pts, pol: sh.pol, w: Math.max(2, sh.r * .8), t: 0 });
+    trail(cur);
   }
   if (R.shots.some(q => q.dead)) R.shots = R.shots.filter(q => !q.dead);
 

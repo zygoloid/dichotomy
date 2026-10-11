@@ -385,20 +385,42 @@ function drawWorld(c) {
   }
   drawRoomFrame(c);
   for (const o of room.obs) {
+    const col = o.hot ? BAD : o.burst ? SHARD : PAL.wall;
     c.fillStyle = '#000'; c.fillRect(o.x, o.y, o.w, o.h);
-    c.fillStyle = rgba(PAL.wall, .14); c.fillRect(o.x, o.y, o.w, o.h);
-    c.strokeStyle = PAL.wall; c.lineWidth = 2.5; c.strokeRect(o.x, o.y, o.w, o.h);
-    c.strokeStyle = rgba(PAL.wall, .4); c.lineWidth = 1; c.strokeRect(o.x + 7, o.y + 7, o.w - 14, o.h - 14);
+    c.fillStyle = rgba(col, o.hot ? .22 : .14); c.fillRect(o.x, o.y, o.w, o.h);
+    c.strokeStyle = col; c.lineWidth = 2.5;
+    if (o.burst) { c.setLineDash([7, 5]); c.lineDashOffset = G.t * 14; }
+    c.strokeRect(o.x, o.y, o.w, o.h); c.setLineDash([]);
+    if (o.hot) { // spikes all round
+      c.beginPath();
+      for (let x = o.x + 6; x < o.x + o.w - 2; x += 12) { c.moveTo(x - 4, o.y); c.lineTo(x, o.y - 8); c.lineTo(x + 4, o.y); c.moveTo(x - 4, o.y + o.h); c.lineTo(x, o.y + o.h + 8); c.lineTo(x + 4, o.y + o.h); }
+      for (let y = o.y + 6; y < o.y + o.h - 2; y += 12) { c.moveTo(o.x, y - 4); c.lineTo(o.x - 8, y); c.lineTo(o.x, y + 4); c.moveTo(o.x + o.w, y - 4); c.lineTo(o.x + o.w + 8, y); c.lineTo(o.x + o.w, y + 4); }
+      c.lineWidth = 1.5; c.stroke();
+    } else if (o.burst) icon(c, UP.burst.icon, o.x + o.w / 2, o.y + o.h / 2, Math.min(26, o.w + 8, o.h + 8), SHARD, 1);
+    else if (o.mv) { // chevrons along the direction of travel
+      const hz = o.mv.ax !== o.mv.bx, cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+      c.lineWidth = 1.5; c.strokeStyle = rgba(PAL.wall, .7); c.beginPath();
+      for (const k of [-1, 1]) { if (hz) { c.moveTo(cx + k * 8, cy - 6); c.lineTo(cx + k * 15, cy); c.lineTo(cx + k * 8, cy + 6); } else { c.moveTo(cx - 6, cy + k * 8); c.lineTo(cx, cy + k * 15); c.lineTo(cx + 6, cy + k * 8); } }
+      c.stroke();
+    } else if (o.w > 20 && o.h > 20) { c.strokeStyle = rgba(PAL.wall, .4); c.lineWidth = 1; c.strokeRect(o.x + 7, o.y + 7, o.w - 14, o.h - 14); }
+  }
+  for (const sa of room.saws) { // a spinning toothed disc and the rail it rides
+    c.strokeStyle = rgba(BAD, .25); c.lineWidth = 1; c.setLineDash([3, 7]); c.beginPath(); c.moveTo(sa.ax, sa.ay); c.lineTo(sa.bx, sa.by); c.stroke(); c.setLineDash([]);
+    c.beginPath();
+    for (let i = 0; i < 16; i++) { const a = G.t * 9 + i * TAU / 16, rr = i % 2 ? sa.r * .68 : sa.r; c.lineTo(sa.x + Math.cos(a) * rr, sa.y + Math.sin(a) * rr); }
+    c.closePath(); c.fillStyle = '#000'; c.fill(); c.strokeStyle = BAD; c.lineWidth = 2.5; c.stroke();
+  }
+  for (const sw of room.switches) { // half light, half dark, and it spins when struck
+    const a = G.t * (sw.cd > 0 ? 14 : 1.2);
+    for (const k of [0, 1]) { c.beginPath(); c.arc(sw.x, sw.y, 14, a + k * Math.PI, a + (k + 1) * Math.PI); c.closePath(); polFill(c, k, false, 1.5); }
+    c.strokeStyle = '#fff'; c.lineWidth = 1.5; polyPath(c, sw.x, sw.y, 21, 4, -a * .5); c.stroke();
   }
   for (const g of room.gates) {
-    const col = PAL.pc[g.pol], open = g.pol === P.pol, hz = g.w > g.h;
+    const col = PAL.pc[g.pol], open = g.pol === P.pol;
     c.fillStyle = rgba(col, g.pol ? .1 : .3); c.fillRect(g.x, g.y, g.w, g.h);
     c.strokeStyle = col; c.lineWidth = open ? 1.5 : 3; c.setLineDash(open ? [4, 12] : g.pol ? [16, 8] : []);
     c.lineDashOffset = -G.t * 40;
-    c.beginPath();
-    if (hz) { c.moveTo(g.x, g.y); c.lineTo(g.x + g.w, g.y); c.moveTo(g.x, g.y + g.h); c.lineTo(g.x + g.w, g.y + g.h); }
-    else { c.moveTo(g.x, g.y); c.lineTo(g.x, g.y + g.h); c.moveTo(g.x + g.w, g.y); c.lineTo(g.x + g.w, g.y + g.h); }
-    c.stroke(); c.setLineDash([]);
+    c.strokeRect(g.x, g.y, g.w, g.h); c.setLineDash([]);
   }
   if (room.portal) {
     const q = room.portal;
@@ -416,7 +438,8 @@ function drawWorld(c) {
   for (const p of R.pickups) {
     if (p.kind === 'shard') {
       c.fillStyle = SHARD; polyPath(c, p.x, p.y, 6, 4, G.t * 4 + p.x); c.fill();
-    } else icon(c, UP.vamp.icon, p.x, p.y + Math.sin(G.t * 4) * 3, 24, HEART, 1.4);
+    } else if (p.kind === 'cell') icon(c, UP.cap.icon, p.x, p.y + Math.sin(G.t * 4 + 1) * 3, 22, PAL.pc[P.pol], 1.4);
+    else icon(c, UP.vamp.icon, p.x, p.y + Math.sin(G.t * 4) * 3, 24, HEART, 1.4);
   }
   for (const o of R.orbs) {
     const k = o.t / 2.6;
@@ -474,6 +497,37 @@ function drawWorld(c) {
   c.globalCompositeOperation = 'source-over';
   if (R.flash > 0) { c.fillStyle = 'rgba(255,60,90,' + R.flash * .25 + ')'; c.fillRect(0, 0, W, H); }
   c.restore();
+}
+
+// Teleporters are drawn by copying part of the finished frame. A wormhole shows a shrunken view
+// of what surrounds its twin, so anything about to come through can be seen approaching. A wall
+// link shows, beyond each wall, the strip of room just inside the opposite wall.
+function drawTeleporters(c) {
+  const room = R.room, cv = c.canvas;
+  for (const w of room.wraps) {
+    const h = w.y1 - w.y0;
+    if (cv && cv.width) {
+      c.drawImage(cv, BX1 - BX0, w.y0, BX0, h, 0, w.y0, BX0, h);          // left margin <- just inside the right wall
+      c.drawImage(cv, BX0, w.y0, BX0, h, BX1, w.y0, W - BX1, h);          // right margin <- just inside the left wall
+    }
+    c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(0, w.y0, BX0, h); c.fillRect(BX1, w.y0, W - BX1, h);
+    for (const x of [BX0, BX1]) { // the wall itself opens: erase it and mark the ends
+      c.strokeStyle = PAL.bg; c.lineWidth = 6; c.beginPath(); c.moveTo(x, w.y0 + 2); c.lineTo(x, w.y1 - 2); c.stroke();
+      c.strokeStyle = '#fff'; c.lineWidth = 2; c.setLineDash([2, 9]); c.lineDashOffset = G.t * 30 * (x === BX0 ? 1 : -1);
+      c.beginPath(); c.moveTo(x, w.y0); c.lineTo(x, w.y1); c.stroke(); c.setLineDash([]);
+      c.beginPath(); c.moveTo(x - 9, w.y0); c.lineTo(x + 9, w.y0); c.moveTo(x - 9, w.y1); c.lineTo(x + 9, w.y1); c.stroke();
+    }
+  }
+  for (const h of room.holes) {
+    const t = room.holes[h.to], view = h.r * 3.2;
+    c.save(); c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.clip();
+    c.fillStyle = '#000'; c.fillRect(h.x - h.r, h.y - h.r, h.r * 2, h.r * 2);
+    if (cv && cv.width) c.drawImage(cv, t.x - view, t.y - view, view * 2, view * 2, h.x - h.r, h.y - h.r, h.r * 2, h.r * 2);
+    c.restore();
+    c.strokeStyle = PAL.wall; c.lineWidth = 2.5; c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+    for (let i = 0; i < 3; i++) { const a = G.t * 2.2 * (h.to ? 1 : -1) + i * TAU / 3; c.beginPath(); c.arc(h.x, h.y, h.r + 5, a, a + 1.1); c.stroke(); }
+  }
 }
 
 // ---------------------------------------------------------------- HUD
@@ -715,11 +769,13 @@ function render(c) {
     src.push([1, W / 2 + Math.cos(G.t * .7) * 380, 215 + Math.sin(G.t * 1.1) * 60, 70, .012]);
   } else {
     drawWorld(c);
+    drawTeleporters(c);
     drawHUD(c);
     if (G.state === 'pause') drawPause(c);
     else if (G.state === 'dead' || G.state === 'win') drawEnd(c, G.state === 'win');
     for (const w of R.wells) src.push([1, w.x, w.y, w.vis || w.r * .22, .00016 * w.str]);
     for (const o of R.orbs) src.push([1, o.x, o.y, 55, .03]);
+    for (const h of R.room.holes) src.push([1, h.x, h.y, 34, .012]); // space pinches in around a wormhole
     if (R.P.stats.repel) src.push([1, R.P.x, R.P.y, 70, -.006 * R.P.stats.repel]); // space bulges outward around the ship
     if (R.room.portal) src.push([1, R.room.portal.x, R.room.portal.y, 46, .02]);
     for (const f of R.fx) src.push([2, f.x, f.y, f.t * f.spd, f.str * (1 - f.t / f.life)]);
