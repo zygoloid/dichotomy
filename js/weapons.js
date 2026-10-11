@@ -65,7 +65,7 @@ function fireVolley(ang) {
   if (s.blade && P.bladeCd <= 0) slash(ang);
   if (s.recoil) { P.kx -= Math.cos(ang) * 130 * s.recoil; P.ky -= Math.sin(ang) * 130 * s.recoil; }
   if (s.dynamo) spendCharge(1.5 * s.dynamo);
-  AU.sfx('shoot');
+  AU.sfx('shoot', P.pol);
 }
 
 // melee arc in front of the ship: hurts enemies, cuts bullets of either colour
@@ -119,7 +119,7 @@ function updateSecondary(dt) {
       spawnShot(P.x, P.y, P.ang + Math.PI + rand(-.9, .9), { dmg: shotDmg() * 3, pol: P.pol, hom: 6, spd: 400, life: 3, size: 1.6, ex: 70, proj: true, burst: true });
   }
   if (s.mine) {
-    if ((P.mineCd -= dt) <= 0 && (!R.room.cleared || P.preview) && hyp(P.vx, P.vy) > s.move * .3 && R.mines.length < 10) {
+    if ((P.mineCd -= dt) <= 0 && !R.room.cleared && hyp(P.vx, P.vy) > s.move * .3 && R.mines.length < 10) {
       P.mineCd = 1.4 / s.mine; R.mines.push({ x: P.x, y: P.y, t: 0 });
     }
   }

@@ -21,44 +21,57 @@ const AU = {
   },
 
   // ------------------------------------------------------------ sound effects
-  tone(f, d, type, vol, f2) {
-    const c = this.ctx, t = c.currentTime, o = c.createOscillator(), g = c.createGain();
-    o.type = type || 'square'; o.frequency.setValueAtTime(f, t);
-    if (f2) o.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t + d);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
-    o.connect(g); g.connect(this.out); o.start(t); o.stop(t + d + 0.02);
+  // Effects are pitched from the current song's scale (see note), so they sit inside the music
+  // rather than fighting it, and are loud and bright enough to read over a full mix.
+  tone(f, d, type, vol, f2, o) {
+    const c = this.ctx, t = c.currentTime + ((o && o.at) || 0), osc = c.createOscillator(), g = c.createGain();
+    osc.type = type || 'square'; osc.frequency.setValueAtTime(f, t);
+    if (f2) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t + d);
+    g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vol, t + .003); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+    osc.connect(g); g.connect(this.out);
+    if (o && o.rev && this.rev) g.connect(this.rev);
+    if (o && o.dly && this.dly) g.connect(this.dly);
+    osc.start(t); osc.stop(t + d + 0.02);
   },
-  noise(d, vol, fq, q) {
+  noise(d, vol, fq, q, rev) {
     const c = this.ctx, t = c.currentTime, s = c.createBufferSource(), g = c.createGain(), f = c.createBiquadFilter();
     s.buffer = this.nbuf; f.type = 'bandpass'; f.frequency.value = fq || 2000; f.Q.value = q || 0.7;
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
-    s.connect(f); f.connect(g); g.connect(this.out); s.start(t, Math.random() * 0.3, d + 0.02);
+    s.connect(f); f.connect(g); g.connect(this.out); if (rev && this.rev) g.connect(this.rev);
+    s.start(t, Math.random() * 0.3, d + 0.02);
   },
-  GAP: { shoot: .05, hit: .04, tink: .05, absorb: .03, kill: .05, graze: .06 },
+  // frequency of a scale degree in the song that is playing
+  note(deg, oct) {
+    const M = this.key || this.MUS[0], n = M.scale.length;
+    return M.root * (this.lift || 1) * Math.pow(2, oct + (M.scale[((deg % n) + n) % n] + 12 * Math.floor(deg / n)) / 12);
+  },
+  GAP: { shoot: .05, hit: .04, tink: .05, absorb: .03, kill: .05, graze: .06, pick: .04 },
   sfx(n, v) {
     if (!this.ctx || this.mute) return;
     const t = this.ctx.currentTime;
     if (t - (this.last[n] || -1) < (this.GAP[n] || .02)) return;
     this.last[n] = t;
+    const N = (d, o) => this.note(d, o);
     switch (n) {
-      case 'shoot': this.tone(620 + rand(60), .06, 'square', .035, 300); break;
-      case 'hit': this.noise(.04, .08, 3200); break;
-      case 'absorb': this.tone(500 + (v || 0) * 6, .07, 'sine', .09, 900 + (v || 0) * 8); break;
-      case 'tink': this.tone(1500, .035, 'triangle', .05, 900); break;
-      case 'graze': this.tone(1800, .03, 'triangle', .04); break;
-      case 'flip': this.tone(v ? 240 : 480, .12, 'sawtooth', .07, v ? 480 : 240); break;
-      case 'deny': this.tone(110, .1, 'square', .08, 90); break;
-      case 'kill': this.noise(.16, .16, 900); this.tone(200, .14, 'triangle', .1, 60); break;
-      case 'boom': this.noise(.5, .3, 300); this.tone(90, .5, 'sine', .3, 30); break;
-      case 'hurt': this.noise(.3, .3, 500); this.tone(300, .3, 'sawtooth', .14, 50); break;
-      case 'burst': this.tone(200, .4, 'sawtooth', .1, 1600); this.noise(.3, .12, 4000); break;
-      case 'pick': this.tone(880, .06, 'triangle', .08, 1320); break;
-      case 'take': this.tone(440, .1, 'square', .07, 880); this.tone(660, .25, 'triangle', .08, 1320); break;
-      case 'clear': this.tone(523, .1, 'triangle', .09); this.tone(784, .25, 'triangle', .08); break;
-      case 'unlock': this.tone(660, .12, 'square', .06); this.tone(990, .3, 'triangle', .09, 1980); break;
-      case 'warp': this.tone(80, .9, 'sawtooth', .12, 1200); this.noise(.8, .1, 1500); break;
-      case 'swap': this.tone(1200, .15, 'square', .07, 150); break;
-      case 'beam': this.tone(140, .2, 'sawtooth', .05, 130); break;
+      // the shot: a bright zap on the tonic (light) or the fifth below it (dark), with a click on top
+      case 'shoot': { const f = v ? N(4, 4) : N(0, 5); this.tone(f, .075, v ? 'sawtooth' : 'square', .14, f * .4); this.noise(.018, .12, 6500, 1); break; }
+      case 'hit': this.noise(.05, .17, 2600); this.tone(N(0, 3), .04, 'square', .08, N(0, 2)); break;
+      case 'absorb': this.tone(N(Math.floor((v || 0) / 15) % 15, 4), .1, 'sine', .17, 0, { dly: true }); break; // climbs the scale as charge builds
+      case 'tink': this.tone(N(7, 5), .045, 'triangle', .12, N(4, 5)); break;
+      case 'graze': this.tone(N(4, 6), .04, 'triangle', .08); break;
+      case 'flip': this.tone(N(0, v ? 4 : 3), .14, 'sawtooth', .14, N(0, v ? 3 : 4)); this.noise(.08, .09, 3000, 2); break;
+      case 'deny': this.tone(N(1, 2), .12, 'square', .13, N(0, 2)); break;
+      case 'kill': this.noise(.2, .28, 1100, .8, true); this.tone(N(0, 3), .16, 'triangle', .22, N(0, 1)); break;
+      case 'boom': this.noise(.7, .42, 260, .7, true); this.tone(95, .6, 'sine', .45, 30); break;
+      case 'hurt': this.noise(.35, .42, 600); this.tone(N(1, 3), .35, 'sawtooth', .24, 50); break;
+      case 'burst': this.tone(N(0, 2), .45, 'sawtooth', .17, N(0, 5), { rev: true }); this.noise(.35, .17, 4000, .7, true); break;
+      case 'pick': this.pk = ((this.pk || 0) + 1) % 4; this.tone(N(4 + this.pk, 5), .08, 'triangle', .14, 0, { dly: true }); break;
+      case 'take': [0, 2, 4, 7].forEach((d, k) => this.tone(N(d, 4), .16, 'square', .11, 0, { at: k * .06, dly: true, rev: true })); break;
+      case 'clear': [4, 7, 9].forEach((d, k) => this.tone(N(d, 4), .2, 'triangle', .14, 0, { at: k * .08, rev: true })); break;
+      case 'unlock': [0, 4, 7, 11].forEach((d, k) => this.tone(N(d, 5), .22, 'triangle', .12, 0, { at: k * .07, dly: true, rev: true })); break;
+      case 'warp': this.tone(N(0, 1), .9, 'sawtooth', .17, N(0, 5), { rev: true }); this.noise(.8, .15, 1500, .7, true); break;
+      case 'swap': this.tone(N(7, 5), .16, 'square', .12, N(0, 3)); break;
+      case 'beam': this.tone(N(0, 2), .25, 'sawtooth', .1, N(0, 2) * .93); break;
     }
   },
 
@@ -71,6 +84,9 @@ const AU = {
   //   gate   rhythm that chops the supersaw chord (the "trance gate"), 0..1 per step
   //   arp    pluck line, scale steps above the chord root
   //   leadA/leadB  melody (B on every fourth bar): scale steps above the chord root, -1 rest, -2 tie
+  // Each song runs a 64-bar cycle of four 16-bar phrases: the base patterns; the *B patterns
+  // with leadC/leadD; the base patterns over progB; then both together, lifted by `lift`
+  // semitones where the song has one.
   MUS: [
     { // progressive trance, A minor: i-VI-III-VII, offbeat bass, 3-3-2 plucks
       root: 55, scale: [0, 2, 3, 5, 7, 8, 10], prog: [0, 5, 2, 6], cb: 2, bassW: 'sawtooth', bassLen: 1.6, bassCut: 420, arpW: 'sawtooth',
@@ -78,35 +94,66 @@ const AU = {
       gate: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1],
       arp: [7, -1, -1, 4, -1, -1, 2, -1, 7, -1, -1, 4, -1, -1, 9, -1],
       leadA: [4, -2, -2, 4, -2, 2, -2, -1, 4, -2, -2, 7, -2, -2, 4, -2],
-      leadB: [4, -2, -2, 4, -2, 2, -2, -1, 0, -2, 2, -2, 4, -2, 6, -2] },
+      leadB: [4, -2, -2, 4, -2, 2, -2, -1, 0, -2, 2, -2, 4, -2, 6, -2],
+      lift: 2, progB: [0, 2, 6, 5],
+      bassB: [-1, -1, 0, -1, -1, -1, 7, -1, -1, -1, 0, -1, -1, -1, 7, 0],
+      gateB: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+      arpB: [0, -1, 4, -1, 7, -1, 4, -1, 9, -1, 7, -1, 4, -1, 2, -1],
+      leadC: [7, -2, -2, -1, 6, -2, 4, -2, -2, -1, 2, -2, 4, -2, -2, -1],
+      leadD: [7, -2, -2, -1, 6, -2, 4, -2, 2, -2, 4, -2, 6, -2, 7, -2] },
     { // acid techno, G phrygian: one chord with a flat-second turn, squelching 303 line
       root: 49, scale: [0, 1, 3, 5, 7, 8, 10], prog: [0, 0, 0, 1], cb: 2, bassW: 'sawtooth', bassLen: 1.4, bassCut: 200, arpW: 'square',
       bass: [-1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1],
       acid: [0, -1, 0, 7, -1, 0, 3, -1, 0, 0, -1, 7, 0, -1, 10, 7],
       acc: [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0], sl: [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1],
       gate: [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      leadB: [7, -1, -1, 7, -1, -1, 6, -2, -2, -2, -1, -1, -1, -1, -1, -1] },
+      leadB: [7, -1, -1, 7, -1, -1, 6, -2, -2, -2, -1, -1, -1, -1, -1, -1],
+      progB: [0, 0, 3, 1],
+      acidB: [0, 0, -1, 3, 0, -1, 7, 5, 0, -1, 3, 0, 10, -1, 7, 3],
+      accB: [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1], slB: [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0],
+      gateB: [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0],
+      arpB: [-1, -1, -1, -1, 7, -1, -1, -1, -1, -1, -1, 7, -1, -1, -1, -1],
+      leadC: [7, -1, -1, -1, -1, -1, -1, -1, 8, -2, 7, -1, -1, -1, -1, -1],
+      leadD: [7, -1, 7, -1, 6, -1, 7, -1, -1, -1, 4, -2, -2, -1, -1, -1] },
     { // dark techno, E minor: rumbling sixteenths, lone stabs into the reverb, slow eerie lead
       root: 41.2, scale: [0, 2, 3, 5, 7, 8, 10], prog: [0, 0, 6, 0], cb: 2, bassW: 'sawtooth', bassLen: .8, bassCut: 170, arpW: 'triangle',
       bass: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0],
       gate: [0, 0, 0, .6, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
       arp: [-1, -1, 7, -1, -1, 7, -1, -1, 9, -1, -1, 7, -1, -1, -1, -1],
       leadA: [4, -2, -2, -2, -2, -2, -2, -2, 3, -2, -2, -2, -2, -2, -2, -1],
-      leadB: [7, -2, -2, -2, -2, -2, -2, -2, 6, -2, -2, -2, 4, -2, -2, -1] },
+      leadB: [7, -2, -2, -2, -2, -2, -2, -2, 6, -2, -2, -2, 4, -2, -2, -1],
+      progB: [0, 0, 3, 6],
+      bassB: [-1, 0, 0, 0, -1, 0, 0, 3, -1, 0, 0, 0, -1, 0, 5, 3],
+      gateB: [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, .6, 0, 0],
+      arpB: [7, -1, -1, -1, -1, -1, 9, -1, -1, 7, -1, -1, -1, -1, 4, -1],
+      leadC: [2, -2, -2, -2, -2, -2, -2, -2, 4, -2, -2, -2, -2, -2, -2, -1],
+      leadD: [4, -2, -2, -2, 6, -2, -2, -2, 7, -2, -2, -2, -2, -2, -2, -1] },
     { // uplifting trance, F# minor: VI-VII-i-i, rolling bass, full gate, soaring lead
       root: 46.25, scale: [0, 2, 3, 5, 7, 8, 10], prog: [5, 6, 0, 0], cb: 2, bassW: 'sawtooth', bassLen: .9, bassCut: 380, arpW: 'sawtooth',
       bass: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 7],
       gate: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1],
       arp: [0, 2, 4, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 4, 7],
       leadA: [7, -2, -2, 6, -2, -2, 4, -2, 2, -2, -2, 4, -2, -2, -2, -1],
-      leadB: [7, -2, -2, 6, -2, -2, 4, -2, 9, -2, -2, 7, -2, 6, 4, -2] },
+      leadB: [7, -2, -2, 6, -2, -2, 4, -2, 9, -2, -2, 7, -2, 6, 4, -2],
+      lift: 2, progB: [0, 5, 2, 6],
+      bassB: [-1, 0, 0, 0, -1, 0, 7, 0, -1, 0, 0, 0, -1, 7, 0, 7],
+      gateB: [1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1],
+      arpB: [7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 0, 2, 4, 7, 4],
+      leadC: [4, -2, -2, -2, 6, -2, 7, -2, -2, -2, 9, -2, 7, -2, -2, -1],
+      leadD: [4, -2, -2, -2, 6, -2, 7, -2, 11, -2, -2, 9, -2, 7, 6, -2] },
     { // psy / hard trance, G# phrygian dominant: galloping bass, stepwise goa runs
       root: 51.9, scale: [0, 1, 4, 5, 7, 8, 10], prog: [0, 0, 1, 0], cb: 2, bassW: 'square', bassLen: .8, bassCut: 500, arpW: 'sawtooth',
       bass: [-1, -1, 0, 0, -1, 0, 0, 7, -1, -1, 0, 0, -1, 0, 7, 0],
       gate: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0],
       arp: [0, 1, 2, 4, 2, 1, 0, 1, 4, 5, 4, 2, 1, 2, 0, -1],
       leadA: [7, -2, 8, 7, -1, 5, 4, -2, 7, -2, 8, 9, -2, 8, 7, -2],
-      leadB: [11, -2, 9, 8, -2, 7, -1, 5, 7, -2, 8, 7, -2, 5, 4, -2] }
+      leadB: [11, -2, 9, 8, -2, 7, -1, 5, 7, -2, 8, 7, -2, 5, 4, -2],
+      progB: [0, 0, 3, 1],
+      bassB: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 7, -1, 0, 7, 0],
+      gateB: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+      arpB: [7, 5, 4, 2, 4, 5, 7, 8, 7, 5, 4, 2, 1, 2, 4, -1],
+      leadC: [4, -2, 5, 4, -1, 2, 1, -2, 4, -2, 5, 7, -2, 5, 4, -2],
+      leadD: [7, -2, 8, 9, -2, 11, -1, 9, 8, -2, 7, 5, -2, 4, 2, -2] }
   ],
   initMusic() {
     const c = this.ctx;
@@ -195,19 +242,23 @@ const AU = {
     const M = this.MUS[mus % 5], sd = 15 / bpm, t = at !== undefined ? at : this.ctx.currentTime + .06 - Math.min(late || 0, .05);
     const s = i % 16, bar = Math.floor(i / 16), ph = bar % 16, n = M.scale.length;
     const full = level > 1 || (level === 1 && ph >= 8), build = level > 0 && ph === 15, cut8 = build && s >= 8;
-    const hz = (d, oct) => M.root * Math.pow(2, oct + (M.scale[((d % n) + n) % n] + 12 * Math.floor(d / n)) / 12);
-    const c0 = M.prog[Math.floor(bar / M.cb) % M.prog.length], cm = c0 > 4 ? c0 - 7 : c0; // keep chords near the tonic
+    const P4 = Math.floor(bar / 16) % 4, V = P4 % 2 === 1, pat = k => (V && M[k + 'B']) || M[k];
+    const lift = M.lift && P4 === 3 ? Math.pow(2, M.lift / 12) : 1;
+    this.key = M; this.lift = lift; // sound effects follow the song
+    const hz = (d, oct) => M.root * lift * Math.pow(2, oct + (M.scale[((d % n) + n) % n] + 12 * Math.floor(d / n)) / 12);
+    const prog = (P4 >= 2 && M.progB) || M.prog, c0 = prog[Math.floor(bar / M.cb) % prog.length], cm = c0 > 4 ? c0 - 7 : c0; // keep chords near the tonic
     const sweep = .5 - .5 * Math.cos((bar % 8 + s / 16) / 8 * Math.PI * 2); // 8-bar filter sweep, 0..1
-    const lead = bar % 4 === 3 ? M.leadB : M.leadA;
+    const lead = V ? (bar % 4 === 3 ? M.leadD : M.leadC) : (bar % 4 === 3 ? M.leadB : M.leadA);
     this.dly.delayTime.setValueAtTime(sd * 3, t);
 
     // --- drums: four on the floor, clap on 2 and 4, open hat on every off-beat
     if (level > 0) {
       if (s % 4 === 0 && !cut8) this.kick(t, .58);
       if ((s === 4 || s === 12) && !cut8) this.clap(t, .42);
+      if (V && s === 15 && bar % 2 === 1 && !build) this.clap(t, .2);                                    // ghost clap in the variation phrases
       if (s % 4 === 2) this.hiss(t, .12, .24, 'highpass', 7000, this.mg);
       else if (s % 4 !== 0) this.hiss(t, .03, s % 4 === 3 ? .13 : .08, 'highpass', 9500, this.mg);
-      if (full && s % 4 === 0) this.hiss(t, .22, .09, 'bandpass', 6500, this.mg);                         // ride
+      if ((full || P4 >= 2) && s % 4 === 0) this.hiss(t, .22, .09, 'bandpass', 6500, this.mg);                         // ride
       if (build) {                                                                                       // roll: quarters, eighths, sixteenths
         if (s === 0) this.hiss(t, sd * 16, .25, 'bandpass', 4500, this.duck, sd * 15.5, true);
         if (s === 0 || s === 4 || s === 8 || s === 10 || s >= 12) this.hiss(t, .09, .16 + s * .022, 'bandpass', 1800 + s * 60, this.mg, 0, true);
@@ -217,14 +268,14 @@ const AU = {
 
     // --- bass
     if (level > 0 && !cut8) {
-      const b = M.bass[s];
+      const b = pat('bass')[s];
       if (b >= 0) {
         this.voice(M.bassW, hz(cm + b, 1), t, sd * M.bassLen, .26, this.duck, { cut: M.bassCut * (1.6 + 2.4 * sweep) + level * 150, cut2: 160, q: 6 });
         this.voice('sine', hz(cm, 0), t, sd * M.bassLen, .11, this.duck, { a: .006, hold: .4 });
       }
-      const a = M.acid ? M.acid[s] : -1;
+      const a = M.acid ? pat('acid')[s] : -1;
       if (a >= 0) {
-        const f = hz(cm + a, 1), acc = M.acc[s], sl = M.sl[s];
+        const f = hz(cm + a, 1), acc = pat('acc')[s], sl = pat('sl')[s];
         this.voice('sawtooth', f, t, sd * (sl ? 2 : .95), acc ? .32 : .22, this.duck,
           { from: sl ? this.lastAcid : 0, cut: (350 + 1900 * sweep) * (acc ? 2.6 : 1.3), cut2: 200, q: 14, dly: !!acc });
         this.lastAcid = f;
@@ -237,11 +288,11 @@ const AU = {
     // --- gated supersaw chord (calm: soft and filtered; drop: wide open)
     if (s === 0 && (level === 0 || full) && !build) {
       const fr = [hz(cm, 2), hz(cm + 2, 2), hz(cm + 4, 2), hz(cm + 7, 2)];
-      this.gateChord(t, sd, M.gate, fr, level ? .06 : .04, level ? 1400 + 3200 * sweep : 500 + 900 * sweep);
+      this.gateChord(t, sd, pat('gate'), fr, level ? .06 : .04, level ? 1400 + 3200 * sweep : 500 + 900 * sweep);
     }
 
     // --- pluck arpeggio
-    const ap = M.arp ? M.arp[s] : -1;
+    const arp = pat('arp'), ap = arp ? arp[s] : -1;
     if (ap >= 0 && !cut8)
       this.voice(M.arpW, hz(cm + ap, 3), t, sd * 1.5, full ? .12 : .14, this.duck, { cut: 1100 + 3200 * sweep, cut2: 500, q: 2.5, dly: true, rev: level === 0 });
 

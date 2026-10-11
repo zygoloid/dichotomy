@@ -50,10 +50,15 @@ function drawBG(c, beat) {
     for (let i = 0; i < 9; i++) { const r = ((beat % 1) + i) * 90; c.moveTo(W / 2 + r, H / 2); c.arc(W / 2, H / 2, r, 0, TAU); }
     for (let i = 0; i < 16; i++) { const a = i * TAU / 16; c.moveTo(W / 2, H / 2); c.lineTo(W / 2 + Math.cos(a) * 900, H / 2 + Math.sin(a) * 900); }
   } else if (p.style === 5) {
-    for (let y = 30; y < H; y += 60) for (let x = 0; x <= W; x += 40) {
-      const yy = y + Math.sin(x * .012 + G.t * 1.2 + y) * 12;
-      if (x) c.lineTo(x, yy); else c.moveTo(x, yy);
+    // water lines: they lie along the room's current and ripple downstream at the arrows' speed
+    const fl = typeof R !== 'undefined' && R && G.state !== 'title' && G.state !== 'gallery' ? R.flow : null;
+    const ang = fl ? Math.atan2(fl.y, fl.x) : 0, ph = fl ? R.flowD : G.t * 60;
+    c.save(); c.translate(W / 2, H / 2); c.rotate(ang);
+    for (let y = -750; y <= 750; y += 60) for (let x = -800; x <= 800; x += 40) {
+      const yy = y + Math.sin((x - ph) * .012 + y) * 12;
+      if (x > -800) c.lineTo(x, yy); else c.moveTo(x, yy);
     }
+    c.restore();
   } else if (p.style === 6) {
     const o = (G.t * 12) % 90;
     for (let k = -H + o; k < W + H; k += 90) { c.moveTo(k, 0); c.lineTo(k + H, H); c.moveTo(k + H, 0); c.lineTo(k, H); }
@@ -170,7 +175,7 @@ function drawEnemy(c, e) {
     const a = r, b = r * .38, pts = [[b, -a], [b, -b], [a, -b], [a, b], [b, b], [b, a], [-b, a], [-b, b], [-a, b], [-a, -b], [-b, -b], [-b, -a]];
     for (const [px, py] of pts) c.lineTo(x + px * cs - py * sn, y + px * sn + py * cs);
     c.closePath();
-  } else polyPath(c, x, y, r, e.sidesOverride || d.sides, e.rot);
+  } else polyPath(c, x, y, r, d.sides, e.rot);
   polFill(c, e.pol, e.fl > 0, e.boss ? 3 : 2);
   if (d.half) { c.beginPath(); c.arc(x, y, r * .55, e.rot, e.rot + Math.PI); c.closePath(); c.fillStyle = PAL.pc[e.pol ^ 1]; c.fill(); }
   if (d.hole) {
@@ -204,6 +209,7 @@ function drawBeams(c) {
     for (const b of e.beams) {
       if (b.state === 'off') continue;
       const L = rayLen(e.x, e.y, b.ang), x1 = e.x + Math.cos(b.ang) * L, y1 = e.y + Math.sin(b.ang) * L, col = PAL.pc[b.pol];
+      c.lineCap = b.state === 'warn' ? 'butt' : 'round';
       c.beginPath(); c.moveTo(e.x, e.y); c.lineTo(x1, y1);
       if (b.state === 'warn') { c.strokeStyle = rgba(col, .45); c.lineWidth = 2; c.setLineDash([6, 10]); c.stroke(); c.setLineDash([]); }
       else {
@@ -212,6 +218,7 @@ function drawBeams(c) {
         c.strokeStyle = col; c.lineWidth = w; c.stroke();
         c.strokeStyle = b.pol ? '#000' : '#fff'; c.lineWidth = w * .45; c.stroke();
       }
+      c.lineCap = 'butt';
     }
   }
 }
@@ -328,14 +335,18 @@ function drawWorld(c) {
   drawBG(c, R.beat);
   if (room.type === 'start' && R.stage === 0) drawTutorial(c);
   if (R.flow) {
-    // drifting chevrons show which way the current runs; they flicker just before it turns
-    const a = Math.atan2(R.flow.y, R.flow.x), o = (G.t * 90) % 120 - 60;
-    c.strokeStyle = rgba(PAL.wall, R.flow.warn && Math.sin(G.t * 30) > 0 ? .08 : .32); c.lineWidth = 2; c.beginPath();
-    for (let gx = BX0 + 70; gx < BX1 - 20; gx += 120) for (let gy = BY0 + 60; gy < BY1 - 20; gy += 100) {
-      const x = gx + R.flow.x * o, y = gy + R.flow.y * o;
-      c.moveTo(x - Math.cos(a - .6) * 13, y - Math.sin(a - .6) * 13); c.lineTo(x, y); c.lineTo(x - Math.cos(a + .6) * 13, y - Math.sin(a + .6) * 13);
+    // Chevrons ride the current. They sit on a lattice aligned with it and slide along one axis
+    // only, wrapping by exactly one cell, so nothing ever jumps; each fades out near the walls.
+    const fx = R.flow.x, fy = R.flow.y, a = Math.atan2(fy, fx), sp = 110, o = R.flowD % sp;
+    const dim = R.flow.warn && Math.sin(G.t * 30) > 0 ? .25 : 1;
+    c.lineWidth = 2;
+    for (let i = -7; i <= 7; i++) for (let j = -7; j <= 7; j++) {
+      const u = i * sp + o, v = j * sp, x = W / 2 + fx * u - fy * v, y = H / 2 + fy * u + fx * v;
+      const edge = Math.min(x - BX0, BX1 - x, y - BY0, BY1 - y);
+      if (edge <= 0) continue;
+      c.strokeStyle = rgba(PAL.wall, .34 * dim * Math.min(1, edge / 70));
+      c.beginPath(); c.moveTo(x - Math.cos(a - .6) * 13, y - Math.sin(a - .6) * 13); c.lineTo(x, y); c.lineTo(x - Math.cos(a + .6) * 13, y - Math.sin(a + .6) * 13); c.stroke();
     }
-    c.stroke();
   }
   for (const f of room.fields) {
     const col = PAL.pc[f.pol];
@@ -404,11 +415,7 @@ function drawWorld(c) {
     c.globalAlpha = 1;
   }
   for (const m of R.mines) { polyPath(c, m.x, m.y, 7, 4, 0); polFill(c, R.P.pol, m.t > .4 && Math.sin(m.t * 14) > .6, 1.5); }
-  for (const e of R.enemies) {
-    if (e.dummy) { c.globalAlpha = .5; c.setLineDash([5, 4]); }
-    drawEnemy(c, e);
-    c.globalAlpha = 1; c.setLineDash([]);
-  }
+  for (const e of R.enemies) drawEnemy(c, e);
   drawBeams(c);
   drawShots(c);
   if (G.state !== 'dead') drawPlayer(c);
@@ -421,13 +428,24 @@ function drawWorld(c) {
     c.beginPath(); c.arc(sl.x, sl.y, 62 + (1 - k) * 22, sl.ang - 1.15, sl.ang + 1.15); c.stroke();
     c.strokeStyle = 'rgba(255,255,255,' + k * .8 + ')'; c.lineWidth = 3 * k; c.stroke();
   }
+  c.lineCap = 'round'; c.lineJoin = 'round';
   for (const tr of R.trails) {
-    const k = 1 - tr.t / .14, p = tr.pts;
-    c.beginPath(); c.moveTo(p[0], p[1]);
-    for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
-    c.lineJoin = 'round'; c.strokeStyle = rgba(PAL.pc[tr.pol], k * .8); c.lineWidth = tr.w * (1 + k); c.stroke();
-    if (tr.pol === 0) { c.strokeStyle = 'rgba(255,255,255,' + k * .7 + ')'; c.lineWidth = tr.w * .4; c.stroke(); }
+    // the body at full width, then the last stretch narrowing to a point
+    const k = 1 - tr.t / .14, p = tr.pts, n = p.length / 2, tip = Math.min(6, n - 1), col = PAL.pc[tr.pol];
+    const pass = (style, w) => {
+      c.strokeStyle = style; c.lineWidth = w;
+      c.beginPath(); c.moveTo(p[0], p[1]);
+      for (let i = 1; i < n - tip; i++) c.lineTo(p[i * 2], p[i * 2 + 1]);
+      c.stroke();
+      for (let i = Math.max(1, n - tip); i < n; i++) {
+        c.lineWidth = Math.max(.6, w * (n - i) / (tip + 1));
+        c.beginPath(); c.moveTo(p[i * 2 - 2], p[i * 2 - 1]); c.lineTo(p[i * 2], p[i * 2 + 1]); c.stroke();
+      }
+    };
+    pass(rgba(col, k * .8), tr.w * (1 + k));
+    if (tr.pol === 0) pass('rgba(255,255,255,' + k * .7 + ')', tr.w * .4);
   }
+  c.lineCap = 'butt';
   for (const a of R.arcs) {
     c.strokeStyle = rgba(PAL.pc[a.pol], 1 - a.t / .18); c.lineWidth = 2.5; c.beginPath(); c.moveTo(a.x0, a.y0);
     for (let i = 1; i < 5; i++) c.lineTo(lerp(a.x0, a.x1, i / 5) + rand(-12, 12), lerp(a.y0, a.y1, i / 5) + rand(-12, 12));

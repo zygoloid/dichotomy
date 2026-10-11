@@ -1,7 +1,7 @@
 <!doctype html>
 <!-- Offline render of the soundtrack. Run with:  node tools/audio_test.js [--wav DIR]
      Prints level statistics for every song at every intensity; with --wav it also writes a
-     preview of each song (8 bars calm, 16 bars combat, 16 bars boss). -->
+     preview of each song: one full 64-bar cycle (8 bars calm, 24 combat, 32 boss). -->
 <meta charset="utf-8"><pre id="out">rendering...</pre>
 <script>const META = { vol: 1 };</script>
 <script src="../js/util.js"></script>
@@ -31,7 +31,7 @@ window.stats = async () => {
 };
 // 16-bit mono WAV as base64
 window.wav = async mus => {
-  const sr = 32000, d = await render(mus, [[0, 8], [1, 16], [2, 16]], sr, false), n = d.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const sr = 32000, d = await render(mus, [[0, 8], [1, 24], [2, 32]], sr, false), n = d.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
   const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
   str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
   v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);

@@ -31,7 +31,7 @@
       else if (hash.includes('boss')) enterRoom(R.floor.rooms.find(r => r.type === 'boss'), null);
       else {
         const want = (/room=([a-z]+)/.exec(hash) || [])[1] || (hash.includes('treasure') ? 'treasure' : 'fight');
-        enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length)) || R.floor.start, null);
+        enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length) && (!hash.includes('current') || r.flow)) || R.floor.start, null);
       }
       G.god = true;
       if (hash.includes('pause')) setTimeout(() => { G.state = 'pause'; }, 300);
@@ -59,7 +59,7 @@
   requestAnimationFrame(tick);
 })();
 
-// screenshot helper: park on the room's first pedestal and fire at the practice targets
+// screenshot helper: park on the room's first pedestal and fire
 function demoOnPed() {
   const p = R.room.peds[0], t = R.enemies[1];
   if (p) { R.P.x = p.x; R.P.y = p.y; }

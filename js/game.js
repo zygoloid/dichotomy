@@ -26,7 +26,7 @@ function newRun() {
     offered: new Set(), killCam: 0, rerollCost: 3,
     shake: 0, inv: 0, ca: 0, flash: 0, eid: 0, shotN: 0, wave: 0, flipRule: false, lastFlipBeat: 0, over: false,
     nStages: 3 + (META.un.stage4 ? 1 : 0) + (META.un.stage5 ? 1 : 0) + (META.un.stage5 && META.un.stage6 ? 1 : 0),
-    route: rollRoute(), flow: null, line: null,
+    route: rollRoute(), flow: null, flowD: 0, line: null,
     st: { kills: 0, absorbed: 0, rooms: 0, bursts: 0, shards: 0 }, hpMul: 1, bspd: 1, room: null, floor: null, nearPed: null
   };
   R.P = {
@@ -201,7 +201,7 @@ function absorbBullet(b) {
     while (P.ofl >= 1) { P.ofl--; spawnShot(P.x, P.y, rand(TAU), { dmg: shotDmg(), pol: P.pol, hom: 6, proj: true }); }
   }
   addCharge(2.2 * s.gain);
-  if (!b.demo) { R.st.absorbed++; mAdd('absorbed'); }
+  R.st.absorbed++; mAdd('absorbed');
   if (s.reflect) {
     P.refl += s.reflect * .34;
     while (P.refl >= 1) {
@@ -210,7 +210,7 @@ function absorbBullet(b) {
       spawnShot(P.x, P.y, t ? Math.atan2(t.y - P.y, t.x - P.x) : P.ang, { dmg: shotDmg(), pol: P.pol ^ 1, hom: 4 });
     }
   }
-  if (s.vamp && !b.demo && ++P.vampN >= 90 / s.vamp) { P.vampN = 0; heal(1); }
+  if (s.vamp && ++P.vampN >= 90 / s.vamp) { P.vampN = 0; heal(1); }
   R.parts.push({ x: b.x, y: b.y, vx: (P.x - b.x) * 6, vy: (P.y - b.y) * 6, t: 0, life: .15, col: PAL.pc[b.pol], s: 4, rot: 0 });
   AU.sfx('absorb', P.charge);
 }
@@ -302,9 +302,9 @@ function updateBullets(dt) {
     if (b.dead) continue;
     const dx = b.x - P.x, dy = b.y - P.y, d2 = dx * dx + dy * dy;
     if (b.pol === P.pol) { if (d2 < (aR + b.r) * (aR + b.r)) absorbBullet(b); }
-    else if (d2 < (hR + b.r * .6) * (hR + b.r * .6)) { b.dead = true; if (b.demo) fxParts(b.x, b.y, PAL.pc[b.pol], 3, 100); else hurtPlayer(); }
+    else if (d2 < (hR + b.r * .6) * (hR + b.r * .6)) { b.dead = true; hurtPlayer(); }
     else if (!b.gz && d2 < (hR + b.r + 20) * (hR + b.r + 20) && P.inv <= 0) {
-      b.gz = true; if (!b.demo) mAdd('grazes'); AU.sfx('graze');
+      b.gz = true; mAdd('grazes'); AU.sfx('graze');
       R.parts.push({ x: P.x + dx * .5, y: P.y + dy * .5, vx: rand(-60, 60), vy: rand(-60, 60), t: 0, life: .25, col: '#ffffff', s: 3, rot: 0 });
       if (s.graze) { addCharge(3 * s.graze * s.gain); P.rateBuff = 1 + .5 * s.graze; }
     }
@@ -333,25 +333,11 @@ function updatePickups(dt) {
 function takePed(p) {
   const P = R.P, room = R.room;
   if (P.shards < p.price || (p.heart && P.hp >= P.stats.maxHp) || (p.hpCost && computeStats(R.ship, P.ups).maxHp <= 1)) { AU.sfx('deny'); return; }
-  clearDemo();
   P.shards -= p.price; p.taken = true;
   if (p.hpCost) { P.ups.push('scar'); AU.sfx('hurt'); fxShake(10); R.flash = 1; }
   if (p.heart) { heal(1); AU.sfx('take'); } else giveUp(p.up);
   if (p.group) for (const q of room.peds) if (q.group === p.group && !q.taken) { q.taken = true; fxParts(q.x, q.y, '#888888', 12, 200); }
   if (room.type === 'challenge' && !room.done) { room.done = true; room.cleared = false; R.wave = 0; spawnWave(room.waves[0]); AU.sfx('warp'); fxShake(10); }
-}
-
-// Trying an upgrade on a pedestal: two targets (one of each colour) and a harmless gun appear.
-function spawnDemo() {
-  if (R.enemies.length) return;
-  const top = R.P.y > H / 2 - 40, y = top ? BY0 + 95 : BY1 - 95;
-  makeEnemy('dummy', W / 2 - 330, y, 0, .3); makeEnemy('dummy', W / 2 - 170, y, 1, .3);
-  makeEnemy('dummy', W / 2 + 330, y, 0, .3).gun = true;
-  for (const e of R.enemies) { e.hx = e.x; e.hy = e.y; if (e.gun) e.sidesOverride = 3; }
-}
-function clearDemo() {
-  if (!R.enemies.some(e => e.dummy)) return;
-  R.enemies = R.enemies.filter(e => !e.dummy); R.bullets = R.bullets.filter(b => !b.demo);
 }
 
 // free pedestals in the current room that a reroll would replace
@@ -376,7 +362,7 @@ function updateRoom(dt) {
   let near = null;
   for (const p of room.peds) if (!p.taken && hyp(p.x - P.x, p.y - P.y) < 50) near = p;
   const pid = near && near.up ? near.up : null;
-  if (pid !== P.preview) { P.preview = pid; recompute(); if (pid) spawnDemo(); else clearDemo(); }
+  if (pid !== P.preview) { P.preview = pid; recompute(); }
   R.nearPed = near;
   if (near && (IN.hit('KeyE') || IN.hit('KeyF') || IN.hit('Enter'))) takePed(near);
   if (IN.hit('KeyR')) {
@@ -414,13 +400,14 @@ function update(dt) {
   R.time += dt;
   R.beat = R.time * PAL.bpm / 60;
   const step = Math.floor(R.beat * 4);
-  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.some(e => !e.dummy) ? 1 : 0, PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }
+  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0, PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }
 
   // the room's current: reverses every 16 beats unless a boss is steering it
   const fl = R.room.flow;
   if (fl) {
     const a = fl.ang + (!fl.fixed && Math.floor(R.beat / 16) % 2 ? Math.PI : 0);
     R.flow = { x: Math.cos(a), y: Math.sin(a), warn: !fl.fixed && R.beat % 16 > 14.5 };
+    R.flowD += 90 * dt;
   } else R.flow = null;
   R.wells = R.room.wells.slice();
   for (const e of R.enemies) if (e.well && e.spawn <= 0 && e.well.str > 5) R.wells.push({ x: e.x, y: e.y, str: e.well.str, r: e.well.r, core: 0, floor: e.well.floor, bcore: e.well.bcore, vis: e.well.vis });
