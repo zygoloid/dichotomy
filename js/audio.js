@@ -94,25 +94,26 @@ const AU = {
   // with leadC/leadD; the base patterns over progB; then both together, lifted by `lift`
   // semitones where the song has one.
   MUS: [
-    { // progressive trance, A minor: i-VI-III-VII, offbeat bass, 3-3-2 plucks
-      root: 55, scale: [0, 2, 3, 5, 7, 8, 10], prog: [0, 5, 2, 6], cb: 2, bassW: 'sawtooth', bassLen: 1.6, bassCut: 420, arpW: 'sawtooth',
-      bass: [-1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, 0],
-      gate: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1],
-      arp: [7, -1, -1, 4, -1, -1, 2, -1, 7, -1, -1, 4, -1, -1, 9, -1],
-      mel: [ // E C D E C A | E C D C | C A C D C A | C A F A | E C E G E C | E C D E | D B D G D B | D B G B, D E
-        '11 - - 9 - - 10 - 11 - - 9 - - 7 -', '11 - - 9 - - 10 - 9 - - - . . . .',
-        '9 - - 7 - - 9 - 10 - - 9 - - 7 -', '9 - - 7 - - 5 - 7 - - - . . . .',
-        '11 - - 9 - - 11 - 13 - - 11 - - 9 -', '11 - - 9 - - 10 - 11 - - - . . . .',
-        '10 - - 8 - - 10 - 13 - - 10 - - 8 -', '10 - - 8 - - 6 - 8 - - . 10 - 11 -'].map(_bar),
-      melB: [ // the same harmony in longer breaths
-        '14 - - - - - 13 - 11 - - - - - 9 -', '10 - - - 11 - - - 9 - - - . . 7 -',
-        '12 - - - - - 10 - 9 - - - - - 7 -', '9 - - - 10 - - - 12 - - - . . 9 -',
-        '13 - - - - - 11 - 9 - - - - - 11 -', '13 - - - 11 - - - 9 - - - . . 11 -',
-        '13 - - - - - 10 - 8 - - - - - 10 -', '8 - - - 10 - - - 11 - 10 - 8 - 6 -'].map(_bar),
-      lift: 2, progB: [0, 2, 6, 5],
-      bassB: [-1, -1, 0, -1, -1, -1, 7, -1, -1, -1, 0, -1, -1, -1, 7, 0],
-      gateB: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
-      arpB: [0, -1, 4, -1, 7, -1, 4, -1, 9, -1, 7, -1, 4, -1, 2, -1] },
+    { // dramatic trance, G harmonic minor: i-iv-VI-V. The major V and its leading tone give
+      // tension rather than cheer; the leading tone is only ever sung over that chord.
+      root: 49, scale: [0, 2, 3, 5, 7, 8, 11], prog: [0, 3, 5, 4], cb: 2, bassW: 'sawtooth', bassLen: 1.5, bassCut: 400, arpW: 'sawtooth',
+      bass: [-1, -1, 0, -1, -1, -1, 7, -1, -1, -1, 0, -1, -1, -1, 7, -1],
+      gate: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+      arp: [0, -1, 4, -1, 7, -1, 4, -1, 9, -1, 7, -1, 4, -1, 7, -1],
+      mel: [ // Gm: D Eb D Bb | D Eb D G   Cm: Eb G Eb C | Eb G Eb A G   Eb: Bb G Eb G | Bb G Bb G Eb   D: A F# A F# | A F# D F# A
+        '11 - - - 12 - 11 - 9 - - - - - - -', '11 - - - 12 - 11 - 14 - - - - - - -',
+        '12 - - - 14 - 12 - 10 - - - - - - -', '12 - - - 14 - 12 - 15 - - - 14 - - -',
+        '16 - - - 14 - 12 - 14 - - - - - - -', '16 - - - 14 - 16 - 14 - - - 12 - - -',
+        '15 - - - 13 - 15 - 13 - - - - - - -', '15 - - - 13 - 11 - 13 - - - 15 - - -'].map(_bar),
+      melB: [ // variation: leaping calls that climb through each chord
+        '14 - 11 - 14 - - - 11 - - - 9 - - -', '16 - 14 - 11 - - - 9 - 11 - 14 - - -',
+        '17 - 14 - 17 - - - 14 - - - 12 - - -', '19 - 17 - 14 - - - 12 - 14 - 17 - - -',
+        '16 - 14 - 16 - - - 14 - - - 12 - - -', '19 - 16 - 14 - - - 12 - 14 - 16 - - -',
+        '18 - 15 - 18 - - - 15 - - - 13 - - -', '20 - 18 - 15 - - - 13 - 15 - 18 - - -'].map(_bar),
+      lift: 2, progB: [0, 5, 3, 4], // second progression: i-VI-iv-V (melP below reorders the bars to match)
+      bassB: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 7],
+      gateB: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0],
+      arpB: [7, 4, 0, 4, 7, 9, 7, 4, 7, 4, 0, 4, 7, 9, 11, 9] },
     { // acid techno, G phrygian: one chord with a flat-second turn, squelching 303 line
       root: 49, scale: [0, 1, 3, 5, 7, 8, 10], prog: [0, 0, 0, 1], cb: 2, bassW: 'sawtooth', bassLen: 1.4, bassCut: 200, arpW: 'square',
       bass: [-1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1],
@@ -157,14 +158,28 @@ const AU = {
       bass: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 7],
       gate: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1],
       arp: [0, 2, 4, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 4, 7],
-      leadA: [7, -2, -2, 6, -2, -2, 4, -2, 2, -2, -2, 4, -2, -2, -2, -1],
-      leadB: [7, -2, -2, 6, -2, -2, 4, -2, 9, -2, -2, 7, -2, 6, 4, -2],
+      // The falling figure (root, seventh, fifth, third) suits the E and F#m bars, where the
+      // seventh is minor. Over D it would be a major seventh, so those bars drop from the F#
+      // the tonic bars start on, through the chord's own notes, instead.
+      mel: [
+        '14 - - 12 - - 9 - 7 - - 9 - - - .', '14 - - 12 - - 9 - 12 - - 9 - - - .',
+        '13 - - 12 - - 10 - 8 - - 10 - - - .', '13 - - 12 - - 10 - 15 - - 13 - 12 10 -',
+        '14 - - 13 - - 11 - 9 - - 11 - - - .', '14 - - 13 - - 11 - 9 - - 11 - - - .',
+        '14 - - 13 - - 11 - 9 - - 11 - - - .', '14 - - 13 - - 11 - 16 - - 14 - 13 11 -'].map(_bar),
+      melB: [ // the rising variation, likewise
+        '9 - - - 10 - 12 - - - 14 - 12 - - .', '9 - - - 10 - 12 - - - 14 - 12 - - .',
+        '10 - - - 12 - 13 - - - 15 - 13 - - .', '10 - - - 12 - 13 - 17 - - 15 - 13 12 -',
+        '11 - - - 13 - 14 - - - 16 - 14 - - .', '11 - - - 13 - 14 - - - 16 - 14 - - .',
+        '11 - - - 13 - 14 - - - 16 - 14 - - .', '11 - - - 13 - 14 - 18 - - 16 - 14 13 -'].map(_bar),
+      melP: [ // over F#m D A E
+        '14 - - 13 - - 11 - 9 - - 11 - - - .', '14 - - 13 - - 11 - 16 - - 14 - 13 11 -',
+        '14 - - 12 - - 9 - 7 - - 9 - - - .', '14 - - 12 - - 9 - 12 - - 9 - - - .',
+        '16 - - 13 - - 11 - 9 - - 11 - - - .', '16 - - 13 - - 11 - 13 - - 11 - - - .',
+        '13 - - 12 - - 10 - 8 - - 10 - - - .', '13 - - 12 - - 10 - 15 - - 13 - 12 10 -'].map(_bar),
       lift: 2, progB: [0, 5, 2, 6],
       bassB: [-1, 0, 0, 0, -1, 0, 7, 0, -1, 0, 0, 0, -1, 7, 0, 7],
       gateB: [1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1],
-      arpB: [7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 0, 2, 4, 7, 4],
-      leadC: [4, -2, -2, -2, 6, -2, 7, -2, -2, -2, 9, -2, 7, -2, -2, -1],
-      leadD: [4, -2, -2, -2, 6, -2, 7, -2, 11, -2, -2, 9, -2, 7, 6, -2] },
+      arpB: [7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 0, 2, 4, 7, 4] },
     { // psy / hard trance, G# phrygian dominant: galloping bass, stepwise goa runs
       root: 51.9, scale: [0, 1, 4, 5, 7, 8, 10], prog: [0, 0, 1, 0], cb: 2, bassW: 'square', bassLen: .8, bassCut: 500, arpW: 'sawtooth',
       bass: [-1, -1, 0, 0, -1, 0, 0, 7, -1, -1, 0, 0, -1, 0, 7, 0],
@@ -331,4 +346,4 @@ const AU = {
     }
   }
 };
-AU.MUS[0].melP = [0, 1, 4, 5, 6, 7, 2, 3].map(i => AU.MUS[0].mel[i]);
+AU.MUS[0].melP = [0, 1, 4, 5, 2, 3, 6, 7].map(i => AU.MUS[0].mel[i]);

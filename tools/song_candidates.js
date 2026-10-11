@@ -46,22 +46,7 @@ const CAND = {
       '14 - - - 12 - - - 10 - - - - - - -', '9 - - - 10 - - - 12 - - - . . . .',
       '14 - - - 12 - - - 10 - - - - - - -', '12 - - - 10 - - - 9 - - - 8 - - -'].map(_bar)
   },
-  // C. Dramatic trance, G harmonic minor (Gm Cm Eb D). The major V chord with its leading
-  //    tone gives tension rather than cheer; full gate, stepwise lead, key lift in the last phrase.
-  c_dramatic: {
-    root: 49, scale: [0, 2, 3, 5, 7, 8, 11], prog: [0, 3, 5, 4], cb: 2, bassW: 'sawtooth', bassLen: 1.5, bassCut: 400, arpW: 'sawtooth', lift: 2,
-    bass: [-1, -1, 0, -1, -1, -1, 7, -1, -1, -1, 0, -1, -1, -1, 7, -1],
-    bassB: [-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 7],
-    gate: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
-    gateB: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0],
-    arp: [0, -1, 4, -1, 7, -1, 4, -1, 9, -1, 7, -1, 4, -1, 7, -1],
-    arpB: [7, 4, 0, 4, 7, 9, 7, 4, 7, 4, 0, 4, 7, 9, 11, 9],
-    mel: [
-      '11 - - - 12 - 11 - 9 - - - - - - -', '11 - - - 12 - 11 - 14 - - - - - - -',
-      '12 - - - 14 - 12 - 10 - - - - - - -', '12 - - - 14 - 12 - 15 - - - 14 - - -',
-      '16 - - - 14 - 12 - 14 - - - - - - -', '16 - - - 14 - 16 - 14 - - - 12 - - -',
-      '15 - - - 13 - 15 - 13 - - - - - - -', '15 - - - 13 - 11 - 13 - - - 15 - - -'].map(_bar)
-  },
+  // (C, dramatic trance in G harmonic minor, was chosen and is now song 0 in js/audio.js.)
   // D. Dorian groove, Bb dorian. A two-chord vamp (Bbm to Eb) with syncopated bass and stabs,
   //    a funky pluck riff and a short bluesy call from a square lead. The least "trance" option.
   d_groove: {
