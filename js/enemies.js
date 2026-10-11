@@ -68,7 +68,10 @@ function navPoint(e) {
 }
 
 function moveTo(e, tx, ty, spd, dt, k) {
-  if (tx === R.P.x && ty === R.P.y && R.nav) { const p = navPoint(e); tx = p.x; ty = p.y; }
+  if (tx === R.P.x && ty === R.P.y && R.nav) { // following a path round walls: hurry, so nobody waits on a slow walker
+    const p = navPoint(e);
+    if (p !== R.P) { tx = p.x; ty = p.y; spd = Math.max(spd * 2, 130); k = 6; }
+  }
   const a = Math.atan2(ty - e.y, tx - e.x), d = hyp(tx - e.x, ty - e.y), s = Math.min(spd, d * 3), f = Math.min(1, (k || 3) * dt);
   e.vx = lerp(e.vx, Math.cos(a) * s, f); e.vy = lerp(e.vy, Math.sin(a) * s, f);
 }
@@ -109,8 +112,9 @@ E('spinner', {
 E('swarm', {
   hp: 9, r: 9, sides: 3, cost: 1, min: 0, group: 4,
   ai(e, dt) {
-    const np = navPoint(e), a = Math.atan2(np.y - e.y, np.x - e.x) + Math.sin(e.t * 4 + e.id) * .9;
-    e.vx = lerp(e.vx, Math.cos(a) * 175, 2 * dt); e.vy = lerp(e.vy, Math.sin(a) * 175, 2 * dt);
+    // weave when the pilot is in sight; fly straight and turn sharply when following a path round walls
+    const np = navPoint(e), direct = np === R.P, a = Math.atan2(np.y - e.y, np.x - e.x) + Math.sin(e.t * 4 + e.id) * (direct ? .9 : .2), k = (direct ? 2 : 6) * dt;
+    e.vx = lerp(e.vx, Math.cos(a) * 175, k); e.vy = lerp(e.vy, Math.sin(a) * 175, k);
     e.rot = Math.atan2(e.vy, e.vx);
   }
 });

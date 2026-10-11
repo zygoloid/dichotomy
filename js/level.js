@@ -38,8 +38,10 @@ function rollUps(n, luck, filter) {
   return out;
 }
 
-function genWaves(stage, depth) {
-  const pool = Object.keys(ENEMY).filter(k => { const d = ENEMY[k]; return !d.boss && !d.mb && d.min <= stage && isUnlocked(d.unlock); });
+// chasers: in a maze only enemies that come looking for you are used, so the room cannot stall
+const CHASERS = ['drifter', 'swarm', 'splitter', 'flipper'];
+function genWaves(stage, depth, chasersOnly) {
+  const pool = Object.keys(ENEMY).filter(k => { const d = ENEMY[k]; return !d.boss && !d.mb && (!chasersOnly || CHASERS.includes(k)) && d.min <= stage && isUnlocked(d.unlock); });
   const budget = 4 + stage * 1.8 + depth * .4 + R.asc;
   const nW = 1 + (chance(.55) ? 1 : 0) + (stage >= 2 && chance(.35) ? 1 : 0), waves = [];
   for (let i = 0; i < nW; i++) {
@@ -240,7 +242,7 @@ function genFloor(stage) {
   const luck = 0;
   for (const r of rooms) {
     if (r.type === 'fight') {
-      genLayout(r); r.waves = genWaves(stage, r.depth);
+      genLayout(r); r.waves = genWaves(stage, r.depth, r.layout === 'maze');
       addHazards(r);
       genTeleporters(r);
     } else if (r.type === 'treasure') {
