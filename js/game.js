@@ -19,22 +19,47 @@ function toast(list) { for (const u of list) { G.toasts.push({ u, t: 0 }); G.new
 
 // ---------------------------------------------------------------- teleporters
 const inWrap = y => R.room.wraps.some(w => y > w.y0 && y < w.y1);
-// Carry o through a wall link or a wormhole if it has reached one. Leaving a wormhole, o keeps its
-// offset from the centre, so it crosses the far hole's disc and comes out the other side; o.tp
-// marks the hole it is emerging from so it is not sent straight back.
+// A wormhole joins the outside of one ring to the outside of its twin. The map between them is a
+// circle inversion turned half a turn: a point at offset d from one centre corresponds to the
+// point at -d * r^2 / |d|^2 from the other. Points on a ring map to the opposite point of the
+// twin ring, the map is its own inverse, and it swaps inside with outside. So the inside of each
+// ring is a (shrunken, mirrored) view of everything outside the other, and an object crossing a
+// ring continues seamlessly out of the twin: it and its image simply swap roles.
+function holeMap(h, x, y, out) {
+  const t = R.room.holes[h.to], dx = x - h.x, dy = y - h.y, f = h.r * h.r / Math.max(16, dx * dx + dy * dy);
+  out.x = t.x - dx * f; out.y = t.y - dy * f;
+  return out;
+}
+// The image of a point that is close to a ring, as seen inside the twin ring (or null). Collision
+// checks test against this too, so an object and its shadow are the same thing.
+const _im = { x: 0, y: 0 };
+function holeImage(x, y) {
+  for (const h of R.room.holes) {
+    const d2 = (x - h.x) * (x - h.x) + (y - h.y) * (y - h.y);
+    if (d2 < h.r * h.r * 4) return holeMap(h, x, y, _im);
+  }
+  return null;
+}
+// Carry o through a wall link, or through a wormhole once its centre crosses a ring. The map
+// mirrors as it inverts, so the part of o's motion along the ring is reversed and the part
+// straight through it is kept: something entering one side leaves the far side of the twin.
 function teleport(o) {
-  const room = R.room, hs = room.holes;
+  const room = R.room;
   if (room.wraps.length && (o.x < BX0 || o.x > BX1) && inWrap(o.y)) { o.x += o.x < BX0 ? BX1 - BX0 : BX0 - BX1; return true; }
-  if (!hs.length) return false;
-  if (o.tp != null) { const h = hs[o.tp]; if (h && hyp(o.x - h.x, o.y - h.y) <= h.r + 2) return false; o.tp = null; }
-  for (let k = 0; k < hs.length; k++) {
-    const h = hs[k];
-    if (hyp(o.x - h.x, o.y - h.y) >= h.r) continue;
-    const t = hs[h.to]; o.x += t.x - h.x; o.y += t.y - h.y; o.tp = h.to;
+  for (const h of room.holes) {
+    const dx = o.x - h.x, dy = o.y - h.y, d = hyp(dx, dy);
+    if (d >= h.r) continue;
+    const nx = dx / (d || 1), ny = dy / (d || 1);
+    const turn = (vx, vy) => { const k = 2 * (vx * nx + vy * ny); _tn.x = k * nx - vx; _tn.y = k * ny - vy; return _tn; };
+    holeMap(h, o.x, o.y, o);
+    if (o.vx !== undefined) { const v = turn(o.vx, o.vy); o.vx = v.x; o.vy = v.y; }
+    if (o.kx !== undefined) { const v = turn(o.kx, o.ky); o.kx = v.x; o.ky = v.y; }
+    if (o.r0 !== undefined) { const v = turn(Math.cos(o.ang), Math.sin(o.ang)); o.ang = Math.atan2(v.y, v.x); } // a shot's heading
     return true;
   }
   return false;
 }
+const _tn = { x: 0, y: 0 };
 // Direction and distance from a point to the pilot by the shortest route, teleporters included,
 // so pulls and pushes act through them.
 const _tv = { x: 0, y: 0, d: 0 };
@@ -382,7 +407,9 @@ function updateBullets(dt) {
     for (const o of obs) if (b.x > o.x && b.x < o.x + o.w && b.y > o.y && b.y < o.y + o.h) { b.dead = true; break; }
     for (const g of R.room.gates) if (g.pol !== b.pol && b.x > g.x && b.x < g.x + g.w && b.y > g.y && b.y < g.y + g.h) { b.dead = true; fxParts(b.x, b.y, PAL.pc[g.pol], 1, 80); break; }
     if (b.dead) continue;
-    const dx = b.x - P.x, dy = b.y - P.y, d2 = dx * dx + dy * dy;
+    let dx = b.x - P.x, dy = b.y - P.y, d2 = dx * dx + dy * dy;
+    const im = R.room.holes.length ? holeImage(b.x, b.y) : null;
+    if (im && (im.x - P.x) * (im.x - P.x) + (im.y - P.y) * (im.y - P.y) < d2) { dx = im.x - P.x; dy = im.y - P.y; d2 = dx * dx + dy * dy; }
     if (s.repel && b.pol !== P.pol) { // a gentle shove: it bends paths, it does not stop them
       const tv = toPilot(b.x, b.y);
       if (tv.d < 130 && tv.d > 1) { const f = 260 * s.repel * (1 - tv.d / 130) * dt; b.vx -= tv.x * f; b.vy -= tv.y * f; }

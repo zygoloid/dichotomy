@@ -541,6 +541,7 @@ function updateEnemies(dt) {
     if (!e.boss) teleport(e);
     if (!e.boss) for (const o of R.room.obs) { const h = circRect(e.x, e.y, e.r, o); if (h) { e.x += h.x; e.y += h.y; } }
     if (hyp(P.x - e.x, P.y - e.y) < e.r * .85 + P.stats.hitR) hurtPlayer();
+    else if (R.room.holes.length) { const im = holeImage(e.x, e.y); if (im && hyp(P.x - im.x, P.y - im.y) < e.r * .85 + P.stats.hitR) hurtPlayer(); }
     if (e.beams) for (const b of e.beams) {
       if (b.state !== 'on') continue;
       const L = rayLen(e.x, e.y, b.ang);

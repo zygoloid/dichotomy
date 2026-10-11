@@ -355,10 +355,11 @@ function stepShot(sh, dt, scan) {
     if (P.fus.rain && sh.frag > 0) for (let i = 0; i < 2; i++) spawnShot(sh.x, sh.y, rand(TAU), { dmg: sh.dmg * .35, pol: sh.pol, split: 0, frag: 0, size: .7, life: .35, proj: !sh.beam, kid: true });
     fxParts(sh.x, sh.y, PAL.pc[sh.pol], 2, 100);
   }
+  const im = R.room.holes.length ? holeImage(sh.x, sh.y) : null, ix = im ? im.x : 0, iy = im ? im.y : 0; // the shot's shadow through a wormhole
   for (const e of R.enemies) {
     if (e.dead || e.spawn > 0 || (sh.hit && sh.hit.has(e))) continue;
     const dx = e.x - sh.x, dy = e.y - sh.y, rr = e.r + sh.r;
-    if (dx * dx + dy * dy < rr * rr) { hitEnemy(sh, e); if (sh.dead) return; }
+    if (dx * dx + dy * dy < rr * rr || (im && (e.x - ix) * (e.x - ix) + (e.y - iy) * (e.y - iy) < rr * rr)) { hitEnemy(sh, e); if (sh.dead) return; }
     else if (s.grav && !e.boss && dx * dx + dy * dy < 150 * 150) { const d = hyp(dx, dy); e.x -= dx / d * s.grav * 45 * dt; e.y -= dy / d * s.grav * 45 * dt; }
   }
   if (!scan) return;

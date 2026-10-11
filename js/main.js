@@ -36,9 +36,10 @@
         enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length) && (!hash.includes('current') || r.flow) && (!/layout=/.test(hash) || r.layout === /layout=([a-z]+)/.exec(hash)[1]) && (!hash.includes('holes') || r.holes.length) && (!hash.includes('wraps') || r.wraps.length)) || R.floor.start, null);
       }
       G.god = true;
+      if (hash.includes('athole')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.holes = [{ x: 420, y: 330, r: 40, to: 1 }, { x: 860, y: 420, r: 40, to: 0 }]; }
       if (hash.includes('pause')) setTimeout(() => { G.state = 'pause'; }, 300);
       const pre = /-t(\d+)/.exec(hash.replace("title", "").replace("treasure", "").replace("stage", ""));
-      for (let i = 0; pre && i < +pre[1] * 60; i++) { if (hash.includes("onped")) demoOnPed(); else if (!hash.includes("still")) demoBot(); frame(1 / 60); IN.end(); }
+      for (let i = 0; pre && i < +pre[1] * 60; i++) { if (hash.includes("athole")) demoAtHole(); else if (hash.includes("onped")) demoOnPed(); else if (!hash.includes("still")) demoBot(); frame(1 / 60); IN.end(); }
     }
   }
 
@@ -60,6 +61,14 @@
   }
   requestAnimationFrame(tick);
 })();
+
+// screenshot helper: sit beside a wormhole, straddling its ring, with bullets streaming through the twin
+function demoAtHole() {
+  const h = R.room.holes[0], t = R.room.holes[1], P = R.P;
+  if (!h) return;
+  P.x = h.x - h.r - 4; P.y = h.y; IN.keys = {}; IN.mb[0] = false;
+  if (R.time % .25 < .02) for (const k of [-1, 0, 1]) eb(t.x + 150, t.y + k * 26, Math.PI, 130, (k + 1) & 1, 7);
+}
 
 // screenshot helper: park on the room's first pedestal and fire
 function demoOnPed() {

@@ -435,6 +435,7 @@ function drawWorld(c) {
       polyPath(c, q.x, q.y, 10 + i * 8, 3 + i, G.t * (2.5 - i * .4) * (i % 2 ? 1 : -1)); c.stroke();
     }
   }
+  for (const h of room.holes) { c.fillStyle = '#000'; c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.fill(); }
   for (const p of room.peds) if (!p.taken) drawPed(c, p, p === R.nearPed);
   if (rerollable().length) {
     c.globalAlpha = .8; keycap(c, W / 2 - 34, BY1 - 34, 'R'); icon(c, UN.reroll.icon, W / 2 - 4, BY1 - 34, 22, '#fff', 1);
@@ -505,9 +506,7 @@ function drawWorld(c) {
   c.restore();
 }
 
-// Teleporters are drawn by copying part of the finished frame. A wormhole shows a shrunken view
-// of what surrounds its twin, so anything about to come through can be seen approaching. A wall
-// link shows, beyond each wall, the strip of room just inside the opposite wall.
+// A wall link shows, beyond each wall, a copy of the strip of room just inside the opposite wall.
 function drawTeleporters(c) {
   const room = R.room, cv = c.canvas;
   for (const w of room.wraps) {
@@ -524,16 +523,8 @@ function drawTeleporters(c) {
       c.beginPath(); c.moveTo(x - 9, w.y0); c.lineTo(x + 9, w.y0); c.moveTo(x - 9, w.y1); c.lineTo(x + 9, w.y1); c.stroke();
     }
   }
-  for (const h of room.holes) {
-    const t = room.holes[h.to], view = h.r * 3.2;
-    c.save(); c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.clip();
-    c.fillStyle = '#000'; c.fillRect(h.x - h.r, h.y - h.r, h.r * 2, h.r * 2);
-    if (cv && cv.width) c.drawImage(cv, t.x - view, t.y - view, view * 2, view * 2, h.x - h.r, h.y - h.r, h.r * 2, h.r * 2);
-    c.restore();
-    c.strokeStyle = PAL.wall; c.lineWidth = 2.5; c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.stroke();
-    c.strokeStyle = '#fff'; c.lineWidth = 1.5;
-    for (let i = 0; i < 3; i++) { const a = G.t * 2.2 * (h.to ? 1 : -1) + i * TAU / 3; c.beginPath(); c.arc(h.x, h.y, h.r + 5, a, a + 1.1); c.stroke(); }
-  }
+  // Wormholes are drawn by the post-process shader (see POST). Without it, mark them plainly.
+  if (!POST.ok) for (const h of room.holes) { c.strokeStyle = PAL.wall; c.lineWidth = 2; c.setLineDash([4, 6]); c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.stroke(); c.setLineDash([]); }
 }
 
 // ---------------------------------------------------------------- HUD
@@ -781,7 +772,6 @@ function render(c) {
     else if (G.state === 'dead' || G.state === 'win') drawEnd(c, G.state === 'win');
     for (const w of R.wells) src.push([1, w.x, w.y, w.vis || w.r * .22, .00016 * w.str]);
     for (const o of R.orbs) src.push([1, o.x, o.y, 55, .03]);
-    for (const h of R.room.holes) src.push([1, h.x, h.y, 34, .012]); // space pinches in around a wormhole
     if (R.P.stats.repel) src.push([1, R.P.x, R.P.y, 70, -.006 * R.P.stats.repel]); // space bulges outward around the ship
     if (R.room.portal) src.push([1, R.room.portal.x, R.room.portal.y, 46, .02]);
     for (const f of R.fx) src.push([2, f.x, f.y, f.t * f.spd, f.str * (1 - f.t / f.life)]);
@@ -794,5 +784,5 @@ function render(c) {
   // the effects setting scales every warp; the colour-swap flash stays partly visible because it carries information
   const fx = META.fx;
   for (const s of src) s[4] *= fx;
-  return { src, ca: .0012 + (ca - .0012) * fx, pulse: pulse * fx, inv: inv * (.4 + .6 * fx), bloom: .45 + .4 * fx, vig: 1 };
+  return { holes: R && G.state !== 'title' && G.state !== 'gallery' ? R.room.holes : [], src, ca: .0012 + (ca - .0012) * fx, pulse: pulse * fx, inv: inv * (.4 + .6 * fx), bloom: .45 + .4 * fx, vig: 1 };
 }
