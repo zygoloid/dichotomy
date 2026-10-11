@@ -52,8 +52,9 @@ for (const ship of SHIPS) {
     enterRoom(room('boss'), null);
     const boss = R.room, t0 = R.time; sim(240, true, true); const maxB = R.bullets.length;
     console.log(ship.id, 'stage', st, JSON.stringify(types), 'ups', R.P.ups.length, 'boss', boss.cleared ? (R.time - t0).toFixed(0) + 's' : 'NOT KILLED', 'dps', (ENEMY[PAL.boss[0]].hp * PAL.boss.length / (R.time - t0)).toFixed(0));
-    G.state = 'pause'; render(CTX); G.state = 'play';
+    if (G.state === 'play') { G.state = 'pause'; render(CTX); G.state = 'play'; }
   }
+  if (G.state === 'win') { G.endT = 2; render(CTX); G.state = 'title'; continue; } // the bot already flew into the portal
   if (!R.room.portal) { console.log('  (bot never killed the last boss; skipping the win check)'); G.state = 'title'; continue; }
   R.P.x = R.room.portal.x; R.P.y = R.room.portal.y; sim(.1, false);
   if (G.state === 'win') { G.endT = 2; render(CTX); }
