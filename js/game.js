@@ -535,12 +535,16 @@ function update(dt) {
   const step = Math.floor(R.beat * 4);
   if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0, PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }
 
-  // the room's current: reverses every 16 beats unless a boss is steering it
+  // The room's current runs along a fixed axis and reverses every 16 beats: its strength s
+  // eases down through zero and back up the other way, never jumping. A boss steering the
+  // current holds it at full strength and turns the axis instead. flowD is how far the water
+  // has travelled along the axis, signed, so the visuals slide back when it reverses.
   const fl = R.room.flow;
   if (fl) {
-    const a = fl.ang + (!fl.fixed && Math.floor(R.beat / 16) % 2 ? Math.PI : 0);
-    R.flow = { x: Math.cos(a), y: Math.sin(a), warn: !fl.fixed && R.beat % 16 > 14.5 };
-    R.flowD += 90 * dt;
+    const w = Math.sin(R.beat * Math.PI / 16), e = Math.min(1, Math.abs(w) * 1.8);
+    const s = fl.fixed ? 1 : Math.sign(w) * e * e * (3 - 2 * e), ux = Math.cos(fl.ang), uy = Math.sin(fl.ang);
+    R.flow = { x: ux * s, y: uy * s, ux, uy, s, ang: fl.ang };
+    R.flowD += 90 * s * dt;
   } else R.flow = null;
   R.wells = R.room.wells.slice();
   for (const e of R.enemies) if (e.well && e.spawn <= 0 && e.well.str > 5) R.wells.push({ x: e.x, y: e.y, str: e.well.str, r: e.well.r, core: 0, floor: e.well.floor, bcore: e.well.bcore, vis: e.well.vis });

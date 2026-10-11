@@ -52,9 +52,11 @@ function drawBG(c, beat) {
   } else if (p.style === 5) {
     // water lines: they lie along the room's current and ripple downstream at the arrows' speed
     const fl = typeof R !== 'undefined' && R && G.state !== 'title' && G.state !== 'gallery' ? R.flow : null;
-    const ang = fl ? Math.atan2(fl.y, fl.x) : 0, ph = fl ? R.flowD : G.t * 60;
+    // In still water alternate lines ripple in opposite directions, so nothing seems to flow.
+    const ang = fl ? fl.ang : 0;
     c.save(); c.translate(W / 2, H / 2); c.rotate(ang);
-    for (let y = -750; y <= 750; y += 60) for (let x = -800; x <= 800; x += 40) {
+    for (let y = -750, n = 0; y <= 750; y += 60, n++) for (let x = -800; x <= 800; x += 40) {
+      const ph = fl ? R.flowD : (n % 2 ? 1 : -1) * G.t * 40;
       const yy = y + Math.sin((x - ph) * .012 + y) * 12;
       if (x > -800) c.lineTo(x, yy); else c.moveTo(x, yy);
     }
@@ -376,10 +378,12 @@ function drawWorld(c) {
   drawBG(c, R.beat);
   if (room.type === 'start' && R.stage === 0) drawTutorial(c);
   if (R.flow) {
-    // Chevrons ride the current. They sit on a lattice aligned with it and slide along one axis
-    // only, wrapping by exactly one cell, so nothing ever jumps; each fades out near the walls.
-    const fx = R.flow.x, fy = R.flow.y, a = Math.atan2(fy, fx), sp = 110, o = R.flowD % sp;
-    const dim = R.flow.warn && Math.sin(G.t * 30) > 0 ? .25 : 1;
+    // Chevrons ride the current. They sit on a lattice aligned with its axis and slide along it,
+    // wrapping by exactly one cell, so nothing ever jumps; each fades out near the walls. Their
+    // brightness is the current's strength, so they dim to nothing as it turns, then return
+    // pointing the other way.
+    const fx = R.flow.ux, fy = R.flow.uy, a = R.flow.ang + (R.flow.s < 0 ? Math.PI : 0), sp = 110, o = R.flowD % sp;
+    const dim = Math.abs(R.flow.s);
     c.lineWidth = 2;
     for (let i = -7; i <= 7; i++) for (let j = -7; j <= 7; j++) {
       const u = i * sp + o, v = j * sp, x = W / 2 + fx * u - fy * v, y = H / 2 + fy * u + fx * v;
