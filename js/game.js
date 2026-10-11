@@ -18,7 +18,8 @@ function dropShards(x, y, n) {
 function toast(list) { for (const u of list) { G.toasts.push({ u, t: 0 }); G.newUn.push(u); } }
 
 // ---------------------------------------------------------------- teleporters
-const inWrap = y => R.room.wraps.some(w => y > w.y0 && y < w.y1);
+// is the left (side < 0) or right (side > 0) wall open at height y?
+const inWrap = (y, side) => R.room.wraps.some(w => { const y0 = side < 0 ? w.l0 : w.r0; return y > y0 && y < y0 + w.h; });
 // A wormhole joins the outside of one ring to the outside of its twin. The map between them is a
 // circle inversion turned half a turn: a point at offset d from one centre corresponds to the
 // point at -d * r^2 / |d|^2 from the other. Points on a ring map to the opposite point of the
@@ -34,6 +35,10 @@ function holeMap(h, x, y, out) {
 // checks test against this too, so an object and its shadow are the same thing.
 const _im = { x: 0, y: 0 };
 function holeImage(x, y) {
+  if (x < BX0 + 40 || x > BX1 - 40) for (const w of R.room.wraps) { // near a linked wall: the copy at the other wall
+    const left = x < W / 2, y0 = left ? w.l0 : w.r0;
+    if (y > y0 - 30 && y < y0 + w.h + 30) { _im.x = x + (left ? BX1 - BX0 : BX0 - BX1); _im.y = y + (left ? w.r0 - w.l0 : w.l0 - w.r0); return _im; }
+  }
   for (const h of R.room.holes) {
     const d2 = (x - h.x) * (x - h.x) + (y - h.y) * (y - h.y);
     if (d2 < h.r * h.r * 4) return holeMap(h, x, y, _im);
@@ -45,7 +50,12 @@ function holeImage(x, y) {
 // straight through it is kept: something entering one side leaves the far side of the twin.
 function teleport(o) {
   const room = R.room;
-  if (room.wraps.length && (o.x < BX0 || o.x > BX1) && inWrap(o.y)) { o.x += o.x < BX0 ? BX1 - BX0 : BX0 - BX1; return true; }
+  if (o.x < BX0 || o.x > BX1) for (const w of room.wraps) {
+    const left = o.x < BX0, y0 = left ? w.l0 : w.r0;
+    if (o.y <= y0 || o.y >= y0 + w.h) continue;
+    o.x += left ? BX1 - BX0 : BX0 - BX1; o.y += left ? w.r0 - w.l0 : w.l0 - w.r0;
+    return true;
+  }
   for (const h of room.holes) {
     const dx = o.x - h.x, dy = o.y - h.y, d = hyp(dx, dy);
     if (d >= h.r) continue;
@@ -66,9 +76,11 @@ const _tv = { x: 0, y: 0, d: 0 };
 function toPilot(x, y) {
   const P = R.P, room = R.room, dx = P.x - x, dy = P.y - y;
   let d = hyp(dx, dy) || 1, bx = dx / d, by = dy / d;
-  for (const w of room.wraps) if (y > w.y0 && y < w.y1 && P.y > w.y0 && P.y < w.y1) {
-    const ax = dx > 0 ? dx - (BX1 - BX0) : dx + (BX1 - BX0), a = hyp(ax, dy);
-    if (a < d) { d = a; bx = ax / a; by = dy / a; }
+  for (const w of room.wraps) for (const s of [-1, 1]) { // s < 0: out through the left wall, in through the right
+    const y0 = s < 0 ? w.l0 : w.r0, p0 = s < 0 ? w.r0 : w.l0;
+    if (y <= y0 || y >= y0 + w.h || P.y <= p0 || P.y >= p0 + w.h) continue;
+    const ax = dx + s * (BX1 - BX0), ay = P.y - (p0 - y0) - y, a = hyp(ax, ay);
+    if (a < d && a > 1) { d = a; bx = ax / a; by = ay / a; }
   }
   for (const h of room.holes) {
     const t = room.holes[h.to], a = hyp(h.x - x, h.y - y);
@@ -341,9 +353,9 @@ function updatePlayer(dt) {
   // walls, with gaps where doors are open
   const pr = 12, open = room.cleared, D = room.doors;
   const gy = Math.abs(P.y - H / 2) < 32, gx = Math.abs(P.x - W / 2) < 32;
-  const wr = inWrap(P.y); // a linked stretch of wall is open to walk through
-  if (P.x < BX0 + pr && !wr && !(open && D.w && gy)) P.x = BX0 + pr;
-  if (P.x > BX1 - pr && !wr && !(open && D.e && gy)) P.x = BX1 - pr;
+  // a linked stretch of wall is open to walk through
+  if (P.x < BX0 + pr && !inWrap(P.y, -1) && !(open && D.w && gy)) P.x = BX0 + pr;
+  if (P.x > BX1 - pr && !inWrap(P.y, 1) && !(open && D.e && gy)) P.x = BX1 - pr;
   if (P.y < BY0 + pr && !(open && D.n && gx)) P.y = BY0 + pr;
   if (P.y > BY1 - pr && !(open && D.s && gx)) P.y = BY1 - pr;
   teleport(P);
@@ -408,7 +420,7 @@ function updateBullets(dt) {
     for (const g of R.room.gates) if (g.pol !== b.pol && b.x > g.x && b.x < g.x + g.w && b.y > g.y && b.y < g.y + g.h) { b.dead = true; fxParts(b.x, b.y, PAL.pc[g.pol], 1, 80); break; }
     if (b.dead) continue;
     let dx = b.x - P.x, dy = b.y - P.y, d2 = dx * dx + dy * dy;
-    const im = R.room.holes.length ? holeImage(b.x, b.y) : null;
+    const im = R.room.holes.length || R.room.wraps.length ? holeImage(b.x, b.y) : null;
     if (im && (im.x - P.x) * (im.x - P.x) + (im.y - P.y) * (im.y - P.y) < d2) { dx = im.x - P.x; dy = im.y - P.y; d2 = dx * dx + dy * dy; }
     if (s.repel && b.pol !== P.pol) { // a gentle shove: it bends paths, it does not stop them
       const tv = toPilot(b.x, b.y);
@@ -436,7 +448,7 @@ function updatePickups(dt) {
       if (tv.d < s.magnet && p.t > .3) { const v = 520 * (1 - tv.d / s.magnet) + 120; p.x += tv.x * v * dt; p.y += tv.y * v * dt; }
     }
     teleport(p);
-    if (!inWrap(p.y)) p.x = clamp(p.x, BX0 + 12, BX1 - 12);
+    p.x = clamp(p.x, inWrap(p.y, -1) ? -99 : BX0 + 12, inWrap(p.y, 1) ? W + 99 : BX1 - 12);
     p.y = clamp(p.y, BY0 + 12, BY1 - 12);
     if (hyp(P.x - p.x, P.y - p.y) >= 20 || (p.kind === 'heart' && P.hp >= s.maxHp)) continue;
     if (p.kind === 'shard') { P.shards++; R.st.shards++; mAdd('shards'); }

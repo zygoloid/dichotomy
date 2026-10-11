@@ -461,6 +461,18 @@ function drawWorld(c) {
   drawShots(c);
   if (G.state !== 'dead') drawPlayer(c);
   drawBullets(c);
+  // Wall links: anything poking out through a linked wall is drawn again where it re-enters,
+  // just inside the wall it is linked to, so nothing pops across.
+  for (const w of room.wraps) for (const s of [1, -1]) { // s > 0: from the left wall to the right
+    c.save();
+    c.beginPath(); c.rect(s > 0 ? BX1 - 70 : BX0, (s > 0 ? w.r0 : w.l0) - 50, 70, w.h + 100); c.clip();
+    c.translate(s * (BX1 - BX0), s * (w.r0 - w.l0));
+    for (const e of R.enemies) drawEnemy(c, e);
+    drawShots(c);
+    if (G.state !== 'dead') drawPlayer(c);
+    drawBullets(c);
+    c.restore();
+  }
   c.globalCompositeOperation = 'lighter';
   for (const b of R.booms) { const k = b.t / .25; c.strokeStyle = rgba('#ffb060', 1 - k); c.lineWidth = 6 * (1 - k) + 1; c.beginPath(); c.arc(b.x, b.y, b.r * (.4 + .6 * k), 0, TAU); c.stroke(); }
   for (const sl of R.slashes) {
@@ -506,22 +518,30 @@ function drawWorld(c) {
   c.restore();
 }
 
-// A wall link shows, beyond each wall, a copy of the strip of room just inside the opposite wall.
+// A wall link shows, beyond each wall, the strip of room just inside the wall it is linked to:
+// at full strength against the wall, fading out with distance and past either end of the opening.
 function drawTeleporters(c) {
-  const room = R.room, cv = c.canvas;
-  for (const w of room.wraps) {
-    const h = w.y1 - w.y0;
-    if (cv && cv.width) {
-      c.drawImage(cv, BX1 - BX0, w.y0, BX0, h, 0, w.y0, BX0, h);          // left margin <- just inside the right wall
-      c.drawImage(cv, BX0, w.y0, BX0, h, BX1, w.y0, W - BX1, h);          // right margin <- just inside the left wall
+  const room = R.room, cv = c.canvas, M = BX0, PAD = 44;
+  if (room.wraps.length && cv && cv.width) {
+    const t = G.teleCv || (G.teleCv = document.createElement('canvas')), tc = t.getContext('2d');
+    for (const w of room.wraps) for (const s of [-1, 1]) { // s < 0: the left margin, showing the right wall's strip
+      const dy0 = (s < 0 ? w.l0 : w.r0) - PAD, sy0 = (s < 0 ? w.r0 : w.l0) - PAD, hh = w.h + PAD * 2;
+      t.width = M; t.height = hh;
+      tc.drawImage(cv, s < 0 ? BX1 - M : BX0, sy0, M, hh, 0, 0, M, hh);
+      tc.globalCompositeOperation = 'destination-in';
+      let g = tc.createLinearGradient(s < 0 ? M : 0, 0, s < 0 ? 0 : M, 0); // strongest at the wall
+      g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      tc.fillStyle = g; tc.fillRect(0, 0, M, hh);
+      g = tc.createLinearGradient(0, 0, 0, hh);                            // soft top and bottom
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(PAD / hh, 'rgba(0,0,0,1)'); g.addColorStop(1 - PAD / hh, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      tc.fillStyle = g; tc.fillRect(0, 0, M, hh);
+      tc.globalCompositeOperation = 'source-over';
+      c.drawImage(t, s < 0 ? 0 : BX1, dy0);
     }
-    c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(0, w.y0, BX0, h); c.fillRect(BX1, w.y0, W - BX1, h);
-    for (const x of [BX0, BX1]) { // the wall itself opens: erase it and mark the ends
-      c.strokeStyle = PAL.bg; c.lineWidth = 6; c.beginPath(); c.moveTo(x, w.y0 + 2); c.lineTo(x, w.y1 - 2); c.stroke();
-      c.strokeStyle = '#fff'; c.lineWidth = 2; c.setLineDash([2, 9]); c.lineDashOffset = G.t * 30 * (x === BX0 ? 1 : -1);
-      c.beginPath(); c.moveTo(x, w.y0); c.lineTo(x, w.y1); c.stroke(); c.setLineDash([]);
-      c.beginPath(); c.moveTo(x - 9, w.y0); c.lineTo(x + 9, w.y0); c.moveTo(x - 9, w.y1); c.lineTo(x + 9, w.y1); c.stroke();
-    }
+  }
+  for (const w of room.wraps) for (const s of [-1, 1]) { // the wall itself is open along the link
+    const x = s < 0 ? BX0 : BX1, y0 = s < 0 ? w.l0 : w.r0;
+    c.strokeStyle = PAL.bg; c.lineWidth = 7; c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y0 + w.h); c.stroke();
   }
   // Wormholes are drawn by the post-process shader (see POST). Without it, mark them plainly.
   if (!POST.ok) for (const h of room.holes) { c.strokeStyle = PAL.wall; c.lineWidth = 2; c.setLineDash([4, 6]); c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.stroke(); c.setLineDash([]); }

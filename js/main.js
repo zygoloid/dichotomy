@@ -36,10 +36,11 @@
         enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length) && (!hash.includes('current') || r.flow) && (!/layout=/.test(hash) || r.layout === /layout=([a-z]+)/.exec(hash)[1]) && (!hash.includes('holes') || r.holes.length) && (!hash.includes('wraps') || r.wraps.length)) || R.floor.start, null);
       }
       G.god = true;
+      if (hash.includes('atwall')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.wraps = [{ l0: 120, r0: 460, h: 140 }]; }
       if (hash.includes('athole')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.holes = [{ x: 420, y: 330, r: 40, to: 1 }, { x: 860, y: 420, r: 40, to: 0 }]; }
       if (hash.includes('pause')) setTimeout(() => { G.state = 'pause'; }, 300);
       const pre = /-t(\d+)/.exec(hash.replace("title", "").replace("treasure", "").replace("stage", ""));
-      for (let i = 0; pre && i < +pre[1] * 60; i++) { if (hash.includes("athole")) demoAtHole(); else if (hash.includes("onped")) demoOnPed(); else if (!hash.includes("still")) demoBot(); frame(1 / 60); IN.end(); }
+      for (let i = 0; pre && i < +pre[1] * 60; i++) { if (hash.includes("atwall")) { R.P.x = BX0 + 4; R.P.y = 190; IN.keys = {}; IN.mb[0] = false; if (R.time % .3 < .02) for (const k of [0, 1, 2]) eb(BX1 - 200, 480 + k * 40, 0, 120, k & 1, 7); } else if (hash.includes("athole")) demoAtHole(); else if (hash.includes("onped")) demoOnPed(); else if (!hash.includes("still")) demoBot(); frame(1 / 60); IN.end(); }
     }
   }
 

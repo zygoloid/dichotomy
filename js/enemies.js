@@ -536,12 +536,12 @@ function updateEnemies(dt) {
     e.t += d;
     e.def.ai(e, d);
     e.x += e.vx * d; e.y += e.vy * d;
-    if (e.boss || !inWrap(e.y)) e.x = clamp(e.x, BX0 + e.r, BX1 - e.r);
+    e.x = clamp(e.x, !e.boss && inWrap(e.y, -1) ? -99 : BX0 + e.r, !e.boss && inWrap(e.y, 1) ? W + 99 : BX1 - e.r);
     e.y = clamp(e.y, BY0 + e.r, BY1 - e.r);
     if (!e.boss) teleport(e);
     if (!e.boss) for (const o of R.room.obs) { const h = circRect(e.x, e.y, e.r, o); if (h) { e.x += h.x; e.y += h.y; } }
     if (hyp(P.x - e.x, P.y - e.y) < e.r * .85 + P.stats.hitR) hurtPlayer();
-    else if (R.room.holes.length) { const im = holeImage(e.x, e.y); if (im && hyp(P.x - im.x, P.y - im.y) < e.r * .85 + P.stats.hitR) hurtPlayer(); }
+    else if (R.room.holes.length || R.room.wraps.length) { const im = holeImage(e.x, e.y); if (im && hyp(P.x - im.x, P.y - im.y) < e.r * .85 + P.stats.hitR) hurtPlayer(); }
     if (e.beams) for (const b of e.beams) {
       if (b.state !== 'on') continue;
       const L = rayLen(e.x, e.y, b.ang);

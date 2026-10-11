@@ -150,9 +150,13 @@ function genTeleporters(r) {
     r.holes = [a, b]; break;
   }
   if (META.un['tele:wrap'] && chance(.25)) {
-    const k = randi(0, 2); // upper stretch, lower stretch, or both
-    if (k !== 1) r.wraps.push({ y0: BY0 + 50, y1: BY0 + 190 });
-    if (k !== 0) r.wraps.push({ y0: BY1 - 190, y1: BY1 - 50 });
+    // A link joins a stretch of the left wall (from l0) to a stretch of the right wall (from r0),
+    // both h tall. Straight across at the top, the bottom or both; or diagonally, one or both ways.
+    const top = BY0 + 50, bot = BY1 - 190, h = 140, k = randi(0, 4);
+    if (k === 0 || k === 2) r.wraps.push({ l0: top, r0: top, h });
+    if (k === 1 || k === 2) r.wraps.push({ l0: bot, r0: bot, h });
+    if (k >= 3) r.wraps.push({ l0: top, r0: bot, h });
+    if (k === 4) r.wraps.push({ l0: bot, r0: top, h });
   }
 }
 
