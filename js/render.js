@@ -86,7 +86,7 @@ function drawBG(c, beat) {
 function drawRoomFrame(c) {
   const room = R.room, open = room.cleared;
   c.fillStyle = 'rgba(0,0,0,.6)';
-  c.fillRect(0, 0, W, BY0); c.fillRect(0, BY1, W, H - BY1); c.fillRect(0, BY0, BX0, BY1 - BY0); c.fillRect(BX1, BY0, W - BX1, BY1 - BY0);
+  c.fillRect(0, 0, W, BY0); c.fillRect(0, BY1, W, H - BY1); drawMargin(c, room, -1); drawMargin(c, room, 1);
   c.strokeStyle = PAL.wall; c.lineWidth = 3;
   const g = 40, D = room.doors;
   c.beginPath();
@@ -362,15 +362,67 @@ function drawPlayer(c) {
   for (let i = 0; i < P.sh; i++) { c.strokeStyle = '#9fe8ff'; c.lineWidth = 2; polyPath(c, P.x, P.y, 20 + i * 4, 6, G.t); c.stroke(); }
 }
 
+// blocks, saws, switches and gates
+function drawFurniture(c) {
+  const room = R.room, P = R.P;
+  for (const o of room.obs) {
+    const col = o.hot ? BAD : o.burst ? SHARD : PAL.wall;
+    c.fillStyle = '#000'; c.fillRect(o.x, o.y, o.w, o.h);
+    c.fillStyle = rgba(col, o.hot ? .22 : .14); c.fillRect(o.x, o.y, o.w, o.h);
+    c.strokeStyle = col; c.lineWidth = 2.5;
+    if (o.burst) { c.setLineDash([7, 5]); c.lineDashOffset = G.t * 14; }
+    c.strokeRect(o.x, o.y, o.w, o.h); c.setLineDash([]);
+    if (o.hot) { // spikes all round
+      c.beginPath();
+      for (let x = o.x + 6; x < o.x + o.w - 2; x += 12) { c.moveTo(x - 4, o.y); c.lineTo(x, o.y - 8); c.lineTo(x + 4, o.y); c.moveTo(x - 4, o.y + o.h); c.lineTo(x, o.y + o.h + 8); c.lineTo(x + 4, o.y + o.h); }
+      for (let y = o.y + 6; y < o.y + o.h - 2; y += 12) { c.moveTo(o.x, y - 4); c.lineTo(o.x - 8, y); c.lineTo(o.x, y + 4); c.moveTo(o.x + o.w, y - 4); c.lineTo(o.x + o.w + 8, y); c.lineTo(o.x + o.w, y + 4); }
+      c.lineWidth = 1.5; c.stroke();
+    } else if (o.burst) icon(c, UP.burst.icon, o.x + o.w / 2, o.y + o.h / 2, Math.min(26, o.w + 8, o.h + 8), SHARD, 1);
+    else if (o.mv) { // chevrons along the direction of travel
+      const hz = o.mv.ax !== o.mv.bx, cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+      c.lineWidth = 1.5; c.strokeStyle = rgba(PAL.wall, .7); c.beginPath();
+      for (const k of [-1, 1]) { if (hz) { c.moveTo(cx + k * 8, cy - 6); c.lineTo(cx + k * 15, cy); c.lineTo(cx + k * 8, cy + 6); } else { c.moveTo(cx - 6, cy + k * 8); c.lineTo(cx, cy + k * 15); c.lineTo(cx + 6, cy + k * 8); } }
+      c.stroke();
+    } else if (o.w > 20 && o.h > 20) { c.strokeStyle = rgba(PAL.wall, .4); c.lineWidth = 1; c.strokeRect(o.x + 7, o.y + 7, o.w - 14, o.h - 14); }
+  }
+  for (const sa of room.saws) { // a spinning toothed disc and the rail it rides
+    c.strokeStyle = rgba(BAD, .25); c.lineWidth = 1; c.setLineDash([3, 7]); c.beginPath(); c.moveTo(sa.ax, sa.ay); c.lineTo(sa.bx, sa.by); c.stroke(); c.setLineDash([]);
+    c.beginPath();
+    for (let i = 0; i < 16; i++) { const a = G.t * 9 + i * TAU / 16, rr = i % 2 ? sa.r * .68 : sa.r; c.lineTo(sa.x + Math.cos(a) * rr, sa.y + Math.sin(a) * rr); }
+    c.closePath(); c.fillStyle = '#000'; c.fill(); c.strokeStyle = BAD; c.lineWidth = 2.5; c.stroke();
+  }
+  for (const sw of room.switches) { // half light, half dark, and it spins when struck
+    const a = G.t * (sw.cd > 0 ? 14 : 1.2);
+    for (const k of [0, 1]) { c.beginPath(); c.arc(sw.x, sw.y, 14, a + k * Math.PI, a + (k + 1) * Math.PI); c.closePath(); polFill(c, k, false, 1.5); }
+    c.strokeStyle = '#fff'; c.lineWidth = 1.5; polyPath(c, sw.x, sw.y, 21, 4, -a * .5); c.stroke();
+  }
+  for (const g of room.gates) {
+    const col = PAL.pc[g.pol], open = g.pol === P.pol;
+    c.fillStyle = rgba(col, g.pol ? .1 : .3); c.fillRect(g.x, g.y, g.w, g.h);
+    c.strokeStyle = col; c.lineWidth = open ? 1.5 : 3; c.setLineDash(open ? [4, 12] : g.pol ? [16, 8] : []);
+    c.lineDashOffset = -G.t * 40;
+    c.strokeRect(g.x, g.y, g.w, g.h); c.setLineDash([]);
+  }
+}
+// everything solid or moving in the room, for the passes that draw shifted copies
+function drawThings(c) {
+  drawFurniture(c);
+  for (const e of R.enemies) if (!e.strad) drawEnemy(c, e);
+  drawShots(c);
+  if (G.state !== 'dead' && !R.P.strad) drawPlayer(c);
+  drawBullets(c);
+}
+
 function drawWorld(c) {
   const room = R.room, P = R.P;
-  // which objects overlap a wormhole ring (o.strad = that ring); they are drawn on the overlay
+  // Wormholes: anything in the tube (o.tu) or overlapping a ring is left out of the scene and
+  // drawn by drawWormholes instead. o.strad is 2 in the tube, else the ring being overlapped.
   const ov = room.holes.length && G.ov ? G.ov : null;
-  const strad = (o, reach) => { for (const h of room.holes) if (Math.abs(hyp(o.x - h.x, o.y - h.y) - h.r) < reach) return h; return null; };
-  P.strad = ov ? strad(P, 15) : null;
+  const strad = (o, reach) => { if (o.tu) return 2; for (const h of room.holes) if (hyp(o.x - h.x, o.y - h.y) - h.r < reach) return h; return null; };
+  P.strad = ov ? strad(P, 34) : null;
   if (ov) {
-    for (const e of R.enemies) e.strad = strad(e, e.r + 3);
-    for (const sh of R.shots) sh.strad = strad(sh, sh.r * 2.5);
+    for (const e of R.enemies) e.strad = strad(e, e.r * 1.5 + 4);
+    for (const sh of R.shots) sh.strad = strad(sh, sh.r * 2.6);
     for (const b of R.bullets) b.strad = strad(b, b.r + 2);
   }
   c.save();
@@ -418,44 +470,7 @@ function drawWorld(c) {
     c.globalAlpha = 1;
   }
   drawRoomFrame(c);
-  for (const o of room.obs) {
-    const col = o.hot ? BAD : o.burst ? SHARD : PAL.wall;
-    c.fillStyle = '#000'; c.fillRect(o.x, o.y, o.w, o.h);
-    c.fillStyle = rgba(col, o.hot ? .22 : .14); c.fillRect(o.x, o.y, o.w, o.h);
-    c.strokeStyle = col; c.lineWidth = 2.5;
-    if (o.burst) { c.setLineDash([7, 5]); c.lineDashOffset = G.t * 14; }
-    c.strokeRect(o.x, o.y, o.w, o.h); c.setLineDash([]);
-    if (o.hot) { // spikes all round
-      c.beginPath();
-      for (let x = o.x + 6; x < o.x + o.w - 2; x += 12) { c.moveTo(x - 4, o.y); c.lineTo(x, o.y - 8); c.lineTo(x + 4, o.y); c.moveTo(x - 4, o.y + o.h); c.lineTo(x, o.y + o.h + 8); c.lineTo(x + 4, o.y + o.h); }
-      for (let y = o.y + 6; y < o.y + o.h - 2; y += 12) { c.moveTo(o.x, y - 4); c.lineTo(o.x - 8, y); c.lineTo(o.x, y + 4); c.moveTo(o.x + o.w, y - 4); c.lineTo(o.x + o.w + 8, y); c.lineTo(o.x + o.w, y + 4); }
-      c.lineWidth = 1.5; c.stroke();
-    } else if (o.burst) icon(c, UP.burst.icon, o.x + o.w / 2, o.y + o.h / 2, Math.min(26, o.w + 8, o.h + 8), SHARD, 1);
-    else if (o.mv) { // chevrons along the direction of travel
-      const hz = o.mv.ax !== o.mv.bx, cx = o.x + o.w / 2, cy = o.y + o.h / 2;
-      c.lineWidth = 1.5; c.strokeStyle = rgba(PAL.wall, .7); c.beginPath();
-      for (const k of [-1, 1]) { if (hz) { c.moveTo(cx + k * 8, cy - 6); c.lineTo(cx + k * 15, cy); c.lineTo(cx + k * 8, cy + 6); } else { c.moveTo(cx - 6, cy + k * 8); c.lineTo(cx, cy + k * 15); c.lineTo(cx + 6, cy + k * 8); } }
-      c.stroke();
-    } else if (o.w > 20 && o.h > 20) { c.strokeStyle = rgba(PAL.wall, .4); c.lineWidth = 1; c.strokeRect(o.x + 7, o.y + 7, o.w - 14, o.h - 14); }
-  }
-  for (const sa of room.saws) { // a spinning toothed disc and the rail it rides
-    c.strokeStyle = rgba(BAD, .25); c.lineWidth = 1; c.setLineDash([3, 7]); c.beginPath(); c.moveTo(sa.ax, sa.ay); c.lineTo(sa.bx, sa.by); c.stroke(); c.setLineDash([]);
-    c.beginPath();
-    for (let i = 0; i < 16; i++) { const a = G.t * 9 + i * TAU / 16, rr = i % 2 ? sa.r * .68 : sa.r; c.lineTo(sa.x + Math.cos(a) * rr, sa.y + Math.sin(a) * rr); }
-    c.closePath(); c.fillStyle = '#000'; c.fill(); c.strokeStyle = BAD; c.lineWidth = 2.5; c.stroke();
-  }
-  for (const sw of room.switches) { // half light, half dark, and it spins when struck
-    const a = G.t * (sw.cd > 0 ? 14 : 1.2);
-    for (const k of [0, 1]) { c.beginPath(); c.arc(sw.x, sw.y, 14, a + k * Math.PI, a + (k + 1) * Math.PI); c.closePath(); polFill(c, k, false, 1.5); }
-    c.strokeStyle = '#fff'; c.lineWidth = 1.5; polyPath(c, sw.x, sw.y, 21, 4, -a * .5); c.stroke();
-  }
-  for (const g of room.gates) {
-    const col = PAL.pc[g.pol], open = g.pol === P.pol;
-    c.fillStyle = rgba(col, g.pol ? .1 : .3); c.fillRect(g.x, g.y, g.w, g.h);
-    c.strokeStyle = col; c.lineWidth = open ? 1.5 : 3; c.setLineDash(open ? [4, 12] : g.pol ? [16, 8] : []);
-    c.lineDashOffset = -G.t * 40;
-    c.strokeRect(g.x, g.y, g.w, g.h); c.setLineDash([]);
-  }
+  drawFurniture(c);
   if (room.portal) {
     const q = room.portal;
     for (let i = 0; i < 5; i++) {
@@ -463,7 +478,6 @@ function drawWorld(c) {
       polyPath(c, q.x, q.y, 10 + i * 8, 3 + i, G.t * (2.5 - i * .4) * (i % 2 ? 1 : -1)); c.stroke();
     }
   }
-  for (const h of room.holes) { c.fillStyle = '#000'; c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.fill(); }
   for (const p of room.peds) if (!p.taken) drawPed(c, p, p === R.nearPed);
   if (rerollable().length) {
     c.globalAlpha = .8; keycap(c, W / 2 - 34, BY1 - 34, 'R'); icon(c, UN.reroll.icon, W / 2 - 4, BY1 - 34, 22, '#fff', 1);
@@ -489,44 +503,8 @@ function drawWorld(c) {
   drawShots(c);
   if (G.state !== 'dead' && !P.strad) drawPlayer(c);
   drawBullets(c);
-  // Wall links: anything poking out through a linked wall is drawn again where it re-enters,
-  // just inside the wall it is linked to, so nothing pops across.
-  for (const w of room.wraps) for (const s of [1, -1]) { // s > 0: from the left wall to the right
-    c.save();
-    c.beginPath(); c.rect(s > 0 ? BX1 - 70 : BX0, (s > 0 ? w.r0 : w.l0) - 50, 70, w.h + 100); c.clip();
-    c.translate(s * (BX1 - BX0), s * (w.r0 - w.l0));
-    for (const e of R.enemies) drawEnemy(c, e);
-    drawShots(c);
-    if (G.state !== 'dead') drawPlayer(c);
-    drawBullets(c);
-    c.restore();
-  }
-  // Wormholes: anything overlapping a ring was left out of the scene above. It is drawn here on
-  // the overlay layer instead, whole and undistorted, twice: where it is, and as a shadow at
-  // the twin ring. The shadow is the object reflected across the ring and carried over, which
-  // is the wormhole's own map at that point, so as it crosses, the object and its shadow trade
-  // places exactly. Everything else near a wormhole is shown through the shader's warped view.
-  if (ov) {
-    ov.setTransform(1, 0, 0, 1, 0, 0); ov.clearRect(0, 0, W, H);
-    if (c.getTransform) ov.setTransform(c.getTransform());
-    const twice = (o, draw) => {
-      const h = o.strad;
-      if (!h) return;
-      const t = room.holes[h.to], dx = o.x - h.x, dy = o.y - h.y, d = hyp(dx, dy) || 1, nx = dx / d, ny = dy / d, k = 2 * h.r - d;
-      draw(ov);
-      ov.save();
-      ov.translate(t.x - nx * k, t.y - ny * k); ov.transform(2 * nx * nx - 1, 2 * nx * ny, 2 * nx * ny, 2 * ny * ny - 1, 0, 0); ov.translate(-o.x, -o.y);
-      draw(ov);
-      ov.restore();
-    };
-    for (const e of R.enemies) twice(e, k => drawEnemy(k, e));
-    ov.globalCompositeOperation = 'lighter';
-    for (const sh of R.shots) twice(sh, k => drawShot(k, sh));
-    ov.globalCompositeOperation = 'source-over';
-    if (G.state !== 'dead') twice(P, k => drawPlayer(k));
-    for (const b of R.bullets) twice(b, k => drawBullet(k, b));
-    G.ovUsed = true;
-  }
+  drawLinks(c);
+  if (ov) drawWormholes(c, ov);
   c.globalCompositeOperation = 'lighter';
   for (const b of R.booms) { const k = b.t / .25; c.strokeStyle = rgba('#ffb060', 1 - k); c.lineWidth = 6 * (1 - k) + 1; c.beginPath(); c.arc(b.x, b.y, b.r * (.4 + .6 * k), 0, TAU); c.stroke(); }
   for (const sl of R.slashes) {
@@ -572,29 +550,102 @@ function drawWorld(c) {
   c.restore();
 }
 
-// A wall link shows, beyond each wall, the strip of room just inside the wall it is linked to:
-// at full strength against the wall, fading out with distance and past either end of the opening.
-function drawTeleporters(c) {
-  const room = R.room, cv = c.canvas, M = BX0, PAD = 44;
-  if (room.wraps.length && cv && cv.width) {
-    const t = G.teleCv || (G.teleCv = document.createElement('canvas')), tc = t.getContext('2d');
-    for (const w of room.wraps) for (const s of [-1, 1]) { // s < 0: the left margin, showing the right wall's strip
-      const dy0 = (s < 0 ? w.l0 : w.r0) - PAD, sy0 = (s < 0 ? w.r0 : w.l0) - PAD, hh = w.h + PAD * 2;
-      t.width = M; t.height = hh;
-      tc.drawImage(cv, s < 0 ? BX1 - M : BX0, sy0, M, hh, 0, 0, M, hh);
-      tc.globalCompositeOperation = 'destination-in';
-      let g = tc.createLinearGradient(s < 0 ? M : 0, 0, s < 0 ? 0 : M, 0); // strongest at the wall
-      g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-      tc.fillStyle = g; tc.fillRect(0, 0, M, hh);
-      g = tc.createLinearGradient(0, 0, 0, hh);                            // soft top and bottom
-      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(PAD / hh, 'rgba(0,0,0,1)'); g.addColorStop(1 - PAD / hh, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-      tc.fillStyle = g; tc.fillRect(0, 0, M, hh);
-      tc.globalCompositeOperation = 'source-over';
-      c.drawImage(t, s < 0 ? 0 : BX1, dy0);
+// ---- wall links
+// Nothing is copied. Everything near a linked wall is simply drawn a second time, shifted to the
+// other end of the link: inside the room, that completes whatever is poking out through the
+// far wall; beyond the wall, on a layer that fades out, it shows what is coming.
+const LINK_PAD = 44;
+// multiply a layer's alpha by a mask: 1 at the wall, 0 at the far edge, soft above and below
+function linkMask(tc, w, h, wallLeft) {
+  tc.globalCompositeOperation = 'destination-in';
+  let g = tc.createLinearGradient(wallLeft ? 0 : w, 0, wallLeft ? w : 0, 0);
+  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  tc.fillStyle = g; tc.fillRect(0, 0, w, h);
+  g = tc.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(LINK_PAD / h, 'rgba(0,0,0,1)'); g.addColorStop(1 - LINK_PAD / h, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  tc.fillStyle = g; tc.fillRect(0, 0, w, h);
+  tc.globalCompositeOperation = 'source-over';
+}
+function drawLinks(c) {
+  const room = R.room, span = BX1 - BX0, cv = c.canvas, soft = cv && cv.width;
+  for (const w of room.wraps) for (const s of [1, -1]) { // s > 0: what is at the left wall, shown at the right wall
+    const dy = s * (w.r0 - w.l0), y0 = (s > 0 ? w.r0 : w.l0) - LINK_PAD, hh = w.h + LINK_PAD * 2, x0 = s > 0 ? BX1 : 0;
+    c.save(); // inside the room: the part of anything that is poking out through the other end
+    c.beginPath(); c.rect(s > 0 ? BX1 - BX0 : BX0, y0, BX0, hh); c.clip();
+    c.translate(s * span, dy); drawThings(c);
+    c.restore();
+    if (!soft) continue;
+    const t = G.linkCv || (G.linkCv = document.createElement('canvas')), tc = t.getContext('2d');
+    t.width = BX0; t.height = hh; // beyond the wall: the same shifted copies, fading out
+    tc.translate(s * span - x0, dy - y0); drawThings(tc); tc.setTransform(1, 0, 0, 1, 0, 0);
+    linkMask(tc, BX0, hh, s > 0);
+    c.drawImage(t, x0, y0);
+  }
+}
+// the dark margin beside the room, with its darkness fading away at each link so that the
+// background carries straight on through the opening
+function drawMargin(c, room, side) {
+  const x = side < 0 ? 0 : BX1, hgt = BY1 - BY0, cv = c.canvas;
+  if (!room.wraps.length || !cv || !cv.width) { c.fillRect(x, BY0, BX0, hgt); return; }
+  const cache = room.marginCv || (room.marginCv = {});
+  if (!cache[side]) {
+    const t = cache[side] = document.createElement('canvas'), tc = t.getContext('2d'), m = document.createElement('canvas'), mc = m.getContext('2d');
+    t.width = BX0; t.height = hgt; tc.fillStyle = 'rgba(0,0,0,.6)'; tc.fillRect(0, 0, BX0, hgt);
+    for (const w of room.wraps) {
+      const hh = w.h + LINK_PAD * 2;
+      m.width = BX0; m.height = hh; mc.fillStyle = '#000'; mc.fillRect(0, 0, BX0, hh); linkMask(mc, BX0, hh, side > 0);
+      tc.globalCompositeOperation = 'destination-out'; tc.drawImage(m, 0, (side < 0 ? w.l0 : w.r0) - LINK_PAD - BY0); tc.globalCompositeOperation = 'source-over';
     }
   }
-  // Wormholes are drawn by the post-process shader (see POST). Without it, mark them plainly.
-  if (!POST.ok) for (const h of room.holes) { c.strokeStyle = PAL.wall; c.lineWidth = 2; c.setLineDash([4, 6]); c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.stroke(); c.setLineDash([]); }
+  c.drawImage(cache[side], x, BY0);
+}
+
+// ---- wormholes
+// Two layers feed the shader (see POST): the overlay, for the rigid part of anything overlapping
+// a rim, clipped to outside the discs; and the tube, unrolled into a rectangle L wide and one
+// circumference tall, holding everything that is in the tube or poking into it. The shader wraps
+// the tube into both discs.
+function drawWormholes(c, ov) {
+  const room = R.room, P = R.P, h0 = room.holes[0], h1 = room.holes[1], r = h0.r, L = 2 * r, C = TAU * r;
+  const tb = G.tube || (G.tube = document.createElement('canvas')), tc = tb.getContext('2d');
+  if (tb.width !== Math.round(L) || tb.height !== Math.round(C)) { tb.width = Math.round(L); tb.height = Math.round(C); }
+  tc.setTransform(1, 0, 0, 1, 0, 0); tc.clearRect(0, 0, tb.width, tb.height);
+  ov.setTransform(1, 0, 0, 1, 0, 0); ov.clearRect(0, 0, W, H);
+  if (c.getTransform) ov.setTransform(c.getTransform());
+  ov.save(); ov.beginPath(); ov.rect(-60, -60, W + 120, H + 120);
+  for (const h of room.holes) { ov.moveTo(h.x + h.r, h.y); ov.arc(h.x, h.y, h.r, 0, TAU); }
+  ov.clip('evenodd');
+  // draw o into the tube with its centre at (x, y) and plane->tube matrix m; three times, as y wraps
+  const inTube = (o, x, y, m, draw) => {
+    y = ((y % C) + C) % C;
+    for (const w of [-C, 0, C]) { tc.save(); tc.translate(x, y + w); tc.transform(m[0], m[1], m[2], m[3], 0, 0); tc.translate(-o.x, -o.y); draw(tc); tc.restore(); }
+  };
+  const rigid = (o, x, y, m, draw) => { ov.save(); ov.translate(x, y); ov.transform(m[0], m[1], m[2], m[3], 0, 0); ov.translate(-o.x, -o.y); draw(ov); ov.restore(); };
+  const each = (o, reach, draw) => {
+    if (!o.strad) return;
+    if (o.tu) { // in the tube; near either mouth, part of it is still (or already) outside
+      const tu = o.tu, th = tu.y / r;
+      inTube(o, tu.x, tu.y, tu.m, draw);
+      if (tu.x < reach) rigid(o, h0.x + Math.cos(th) * (r - tu.x), h0.y + Math.sin(th) * (r - tu.x), mMul(holeMi(0, th), tu.m), draw);
+      if (tu.x > L - reach) rigid(o, h1.x - Math.cos(th) * (r + tu.x - L), h1.y - Math.sin(th) * (r + tu.x - L), mMul(holeMi(1, th + Math.PI), tu.m), draw);
+    } else { // outside, but overlapping a rim: its inner part is already in the tube
+      const h = o.strad, k = h === h0 ? 0 : 1, dx = o.x - h.x, dy = o.y - h.y, d = hyp(dx, dy), th = Math.atan2(dy, dx);
+      draw(ov);
+      inTube(o, k ? L + d - r : r - d, r * (th - (k ? Math.PI : 0)), holeM(k, th), draw);
+    }
+  };
+  for (const e of R.enemies) each(e, e.r * 1.5 + 4, k => drawEnemy(k, e));
+  ov.globalCompositeOperation = tc.globalCompositeOperation = 'lighter';
+  for (const sh of R.shots) each(sh, sh.r * 2.6, k => drawShot(k, sh));
+  ov.globalCompositeOperation = tc.globalCompositeOperation = 'source-over';
+  if (G.state !== 'dead') each(P, 34, k => drawPlayer(k));
+  for (const b of R.bullets) each(b, b.r + 2, k => drawBullet(k, b));
+  ov.restore();
+  G.ovUsed = true;
+}
+function drawTeleporters(c) {
+  // Without the post-process shader wormholes cannot be shown; mark them plainly.
+  if (!POST.ok) for (const h of R.room.holes) { c.strokeStyle = PAL.wall; c.lineWidth = 2; c.setLineDash([4, 6]); c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.stroke(); c.setLineDash([]); }
 }
 
 // ---------------------------------------------------------------- HUD

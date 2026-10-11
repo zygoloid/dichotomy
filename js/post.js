@@ -11,7 +11,7 @@ const POST = {
 in vec2 a; out vec2 uv; void main(){ uv=a*.5+.5; gl_Position=vec4(a,0.,1.); }`;
     const fs = `#version 300 es
 precision highp float;
-uniform sampler2D T; uniform sampler2D O; uniform float useO; uniform vec2 R;
+uniform sampler2D T; uniform sampler2D O; uniform sampler2D B; uniform float useO, useB; uniform vec2 R;
 uniform vec4 src[16]; uniform float typ[16];
 uniform vec4 hole[4]; // wormhole rings as pairs (0,1) and (2,3): centre.xy, radius; radius 0 = unused
 uniform float ca, pulse, inv, bloom, vig;
@@ -28,24 +28,31 @@ void main(){
       float k=exp(-pow((r-z)/.035,2.)); p+=n*k*w; cab+=k*abs(w)*.5;
     }
   }
-  // Wormholes. Inside a ring: sample the scene outside its twin through the inversion, fading
-  // toward the centre (which is the far distance). Objects overlapping a ring are instead drawn
-  // whole, undistorted, on the overlay layer O (see drawWorld), which is composited on top below.
-  float dim=1.; vec2 p1=p;
-  for(int i=0;i<4;i++){
+  // Wormholes. Each ring's disc shows the tube that joins the pair, end-on: u is how far along
+  // the tube a pixel is (0 at ring 0's rim, 1 at ring 1's), so a disc's own rim is at its edge
+  // and the other rim is shrunk to its centre. The ground of each half of the tube is the
+  // ground under its own ring, squeezed to half depth, so the background is continuous across
+  // each rim; the halves crossfade in the middle. Objects in the tube come from texture B,
+  // which is the tube unrolled (see drawWormholes). Things overlapping a rim are drawn rigid
+  // outside it on the overlay O and continue inside via B.
+  float inside=0.; vec3 icol=vec3(0.); vec2 p1=p;
+  for(int i=0;i<2;i++){
     float hr=hole[i].z; if(hr<=0.) continue;
-    int j=(i/2)*2+1-(i-(i/2)*2);
     vec2 d=p-hole[i].xy; d.x*=asp; float rho=length(d);
-    if(rho<hr){
-      vec2 m=-d*(hr*hr/max(rho*rho,1e-7)); m.x/=asp; p=hole[j].xy+m;
-      dim=smoothstep(.1,.55,rho/hr); break;
-    }
+    if(rho>=hr) continue;
+    float th0=atan(-d.y,d.x)-(i==1?3.14159265:0.);
+    float u=i==0?1.-rho/hr:rho/hr;
+    vec2 e0=vec2(cos(th0)/asp,-sin(th0))*hr;
+    vec3 g=mix(texture(T,hole[0].xy+e0*max(0.,1.-2.*u)).rgb, texture(T,hole[1].xy-e0*max(0.,2.*u-1.)).rgb, smoothstep(.4,.6,u));
+    g*=mix(1.,.3,1.-abs(2.*u-1.));
+    if(useB>.5){ vec4 tb=texture(B,vec2(u,1.-fract(th0/6.2831853))); g=mix(g,tb.rgb,tb.a); }
+    icol=g; inside=1.; break;
   }
   vec2 c=p-.5; float e=cab*(.4+dot(c,c)*3.);
   vec3 col=vec3(texture(T,p+c*e).r, texture(T,p).g, texture(T,p-c*e).b);
   vec3 bl=textureLod(T,p,2.5).rgb*.4+textureLod(T,p,4.).rgb*.4+textureLod(T,p,5.5).rgb*.35;
   col+=bl*bloom;
-  col*=dim;
+  if(inside>.5) col=icol+bl*bloom; // same glow as outside, so the rim does not show as a step
   if(useO>.5){ vec4 ov=texture(O,p1); col=mix(col,ov.rgb,ov.a)+textureLod(O,p1,3.).rgb*.5; }
   col=mix(col,1.-col,inv);
   col*=1.-vig*dot(c,c)*1.5;
@@ -69,7 +76,7 @@ void main(){
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
       this.u = {};
-      for (const n of ['T', 'O', 'useO', 'R', 'src', 'typ', 'hole', 'ca', 'pulse', 'inv', 'bloom', 'vig']) this.u[n] = gl.getUniformLocation(pr, n);
+      for (const n of ['T', 'O', 'B', 'useO', 'useB', 'R', 'src', 'typ', 'hole', 'ca', 'pulse', 'inv', 'bloom', 'vig']) this.u[n] = gl.getUniformLocation(pr, n);
       gl.uniform1i(this.u.T, 0); gl.uniform1i(this.u.O, 1);
       // second texture: the overlay layer
       this.tex2 = gl.createTexture(); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.tex2);
@@ -77,6 +84,14 @@ void main(){
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+      // third texture: the wormhole tube, unrolled; it wraps around in v
+      gl.uniform1i(this.u.B, 2);
+      this.tex3 = gl.createTexture(); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.tex3);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
       gl.activeTexture(gl.TEXTURE0);
       this.srcA = new Float32Array(this.MAX * 4); this.typA = new Float32Array(this.MAX); this.holeA = new Float32Array(16);
@@ -93,9 +108,18 @@ void main(){
     if (o.overlay) {
       gl.activeTexture(gl.TEXTURE1);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, o.overlay); gl.generateMipmap(gl.TEXTURE_2D);
+      // third texture: the wormhole tube, unrolled; it wraps around in v
+      gl.uniform1i(this.u.B, 2);
+      this.tex3 = gl.createTexture(); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.tex3);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
       gl.activeTexture(gl.TEXTURE0);
     }
-    gl.uniform1f(this.u.useO, o.overlay ? 1 : 0);
+    if (o.tube) { gl.activeTexture(gl.TEXTURE2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, o.tube); gl.activeTexture(gl.TEXTURE0); }
+    gl.uniform1f(this.u.useO, o.overlay ? 1 : 0); gl.uniform1f(this.u.useB, o.tube ? 1 : 0);
     this.typA.fill(0);
     const n = Math.min(sources.length, this.MAX);
     for (let i = 0; i < n; i++) {

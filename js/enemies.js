@@ -525,6 +525,7 @@ function updateEnemies(dt) {
     if (e.fl > 0) e.fl -= dt;
     if (e.df > 0) e.df -= dt;
     if (e.spawn > 0) { e.spawn -= dt; continue; }
+    if (e.tu) { tubeStep(e, dt); continue; } // riding a wormhole
     let d = dt;
     if (e.slowT > 0) { e.slowT -= dt; d *= e.boss ? (1 + e.slowF) / 2 : e.slowF; }
     if (e.elite) d *= 1.35;
@@ -541,7 +542,7 @@ function updateEnemies(dt) {
     if (!e.boss) teleport(e);
     if (!e.boss) for (const o of R.room.obs) { const h = circRect(e.x, e.y, e.r, o); if (h) { e.x += h.x; e.y += h.y; } }
     if (hyp(P.x - e.x, P.y - e.y) < e.r * .85 + P.stats.hitR) hurtPlayer();
-    else if (R.room.holes.length || R.room.wraps.length) { const im = holeImage(e.x, e.y); if (im && hyp(P.x - im.x, P.y - im.y) < e.r * .85 + P.stats.hitR) hurtPlayer(); }
+    else if (R.room.wraps.length) { const im = holeImage(e.x, e.y); if (im && hyp(P.x - im.x, P.y - im.y) < e.r * .85 + P.stats.hitR) hurtPlayer(); }
     if (e.beams) for (const b of e.beams) {
       if (b.state !== 'on') continue;
       const L = rayLen(e.x, e.y, b.ang);

@@ -20,37 +20,69 @@ function toast(list) { for (const u of list) { G.toasts.push({ u, t: 0 }); G.new
 // ---------------------------------------------------------------- teleporters
 // is the left (side < 0) or right (side > 0) wall open at height y?
 const inWrap = (y, side) => R.room.wraps.some(w => { const y0 = side < 0 ? w.l0 : w.r0; return y > y0 && y < y0 + w.h; });
-// A wormhole joins the outside of one ring to the outside of its twin. The map between them is a
-// circle inversion turned half a turn: a point at offset d from one centre corresponds to the
-// point at -d * r^2 / |d|^2 from the other. Points on a ring map to the opposite point of the
-// twin ring, the map is its own inverse, and it swaps inside with outside. So the inside of each
-// ring is a (shrunken, mirrored) view of everything outside the other, and an object crossing a
-// ring continues seamlessly out of the twin: it and its image simply swap roles.
-function holeMap(h, x, y, out) {
-  const t = R.room.holes[h.to], dx = x - h.x, dy = y - h.y, f = h.r * h.r / Math.max(16, dx * dx + dy * dy);
-  out.x = t.x - dx * f; out.y = t.y - dy * f;
-  return out;
+// A wormhole is a tube joining two rings, as long as a ring is wide (L = 2r) and as far round
+// as the ring (2*pi*r). Tube coordinates: x runs from ring 0 (x = 0) to ring 1 (x = L); y is the
+// distance round, y = r * (angle at ring 0), and ring 1 is met half a turn on, so something
+// going straight in one side comes straight out of the far side of the other ring.
+// An object whose centre crosses a ring gets o.tu and coasts down the tube to the other end.
+// While it does, o.x and o.y sit where it is seen: each ring's disc shows the tube end-on,
+// with its own rim at the edge and the far rim shrunk to the centre.
+// holeM(k, th) maps plane directions to tube directions at ring k, angle th; holeMi is its inverse.
+// Both are stored as canvas transforms [a, b, c, d]. Ring 0's is a reflection, which is why a
+// passage mirrors things: motion straight through is kept, motion along the rim is reversed.
+const holeM = (k, th) => { const c = Math.cos(th), s = Math.sin(th); return k ? [c, -s, s, c] : [-c, -s, -s, c]; };
+const holeMi = (k, th) => { const c = Math.cos(th), s = Math.sin(th); return k ? [c, s, -s, c] : [-c, -s, -s, c]; };
+const mMul = (A, B) => [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3]];
+const TUBE_MIN = 170; // slowest speed along the tube, so nothing dawdles inside
+
+function holeEnter(o, k) {
+  const h = R.room.holes[k], dx = o.x - h.x, dy = o.y - h.y, d = hyp(dx, dy) || 1, th = Math.atan2(dy, dx), L = h.r * 2;
+  let vx = 0, vy = 0;
+  if (o.r0 !== undefined) { vx = Math.cos(o.ang) * o.spd; vy = Math.sin(o.ang) * o.spd; } // a shot
+  else if (o === R.P) { vx = o.vx + o.kx; vy = o.vy + o.ky; }
+  else if (o.vx !== undefined) { vx = o.vx; vy = o.vy; }
+  const m = holeM(k, th), dir = k ? -1 : 1;
+  o.tu = {
+    k, m, dir, sp: hyp(vx, vy), x: k ? L - (h.r - d) : h.r - d, y: h.r * (th - (k ? Math.PI : 0)),
+    vx: dir * Math.max(TUBE_MIN, dir * (m[0] * vx + m[2] * vy)), vy: m[1] * vx + m[3] * vy
+  };
+  tubeSeen(o);
 }
-// The image of a point that is close to a ring, as seen inside the twin ring (or null). Collision
-// checks test against this too, so an object and its shadow are the same thing.
+// put o where it is seen: in ring 0's disc for the first half of the tube, ring 1's for the second
+function tubeSeen(o) {
+  const tu = o.tu, hs = R.room.holes, r = hs[0].r, L = r * 2, near0 = tu.x < L / 2, h = hs[near0 ? 0 : 1];
+  const rho = near0 ? r * (1 - tu.x / L) : r * tu.x / L, th = tu.y / r + (near0 ? 0 : Math.PI);
+  o.x = h.x + Math.cos(th) * rho; o.y = h.y + Math.sin(th) * rho;
+}
+// advance o along the tube; returns true when it has come out of the far end
+function tubeStep(o, dt) {
+  const tu = o.tu, hs = R.room.holes, r = hs[0].r, L = r * 2;
+  tu.x += tu.vx * dt; tu.y += tu.vy * dt;
+  if (tu.x > 0 && tu.x < L) { tubeSeen(o); return false; }
+  const j = tu.dir > 0 ? 1 : 0, h = hs[j], th = tu.y / r + (j ? Math.PI : 0), mi = holeMi(j, th);
+  const over = (j ? tu.x - L : -tu.x) + 2;
+  o.x = h.x + Math.cos(th) * (r + over); o.y = h.y + Math.sin(th) * (r + over);
+  const f = tu.sp / (hyp(tu.vx, tu.vy) || 1), vx = (mi[0] * tu.vx + mi[2] * tu.vy) * f, vy = (mi[1] * tu.vx + mi[3] * tu.vy) * f;
+  if (o.r0 !== undefined) o.ang = Math.atan2(mi[1] * tu.vx + mi[3] * tu.vy, mi[0] * tu.vx + mi[2] * tu.vy);
+  else if (o === R.P) {
+    const n = mMul(mi, tu.m), fx = Math.cos(o.face), fy = Math.sin(o.face); // the hull comes out mirrored too
+    o.face = Math.atan2(n[1] * fx + n[3] * fy, n[0] * fx + n[2] * fy);
+    o.vx = vx; o.vy = vy; o.kx = o.ky = 0;
+  } else if (o.vx !== undefined) { o.vx = vx; o.vy = vy; }
+  o.tu = null;
+  return true;
+}
+// The copy of a point near a linked wall, at the other end of the link (or null). Collision
+// checks test against this too, so an object poking through a link is in both places.
 const _im = { x: 0, y: 0 };
 function holeImage(x, y) {
-  if (x < BX0 + 40 || x > BX1 - 40) for (const w of R.room.wraps) { // near a linked wall: the copy at the other wall
+  if (x < BX0 + 40 || x > BX1 - 40) for (const w of R.room.wraps) {
     const left = x < W / 2, y0 = left ? w.l0 : w.r0;
     if (y > y0 - 30 && y < y0 + w.h + 30) { _im.x = x + (left ? BX1 - BX0 : BX0 - BX1); _im.y = y + (left ? w.r0 - w.l0 : w.l0 - w.r0); return _im; }
   }
-  for (const h of R.room.holes) { // reflected across the ring, then across to the twin: where its shadow is drawn
-    const dx = x - h.x, dy = y - h.y, d = hyp(dx, dy);
-    if (d >= h.r * 2 || d < 1) continue;
-    const t = R.room.holes[h.to], k = (2 * h.r - d) / d;
-    _im.x = t.x - dx * k; _im.y = t.y - dy * k;
-    return _im;
-  }
   return null;
 }
-// Carry o through a wall link, or through a wormhole once its centre crosses a ring. The map
-// mirrors as it inverts, so the part of o's motion along the ring is reversed and the part
-// straight through it is kept: something entering one side leaves the far side of the twin.
+// Carry o through a wall link, or start it down a wormhole once its centre crosses a ring.
 function teleport(o) {
   const room = R.room;
   if (o.x < BX0 || o.x > BX1) for (const w of room.wraps) {
@@ -59,20 +91,12 @@ function teleport(o) {
     o.x += left ? BX1 - BX0 : BX0 - BX1; o.y += left ? w.r0 - w.l0 : w.l0 - w.r0;
     return true;
   }
-  for (const h of room.holes) {
-    const dx = o.x - h.x, dy = o.y - h.y, d = hyp(dx, dy);
-    if (d >= h.r) continue;
-    const nx = dx / (d || 1), ny = dy / (d || 1);
-    const turn = (vx, vy) => { const k = 2 * (vx * nx + vy * ny); _tn.x = k * nx - vx; _tn.y = k * ny - vy; return _tn; };
-    holeMap(h, o.x, o.y, o);
-    if (o.vx !== undefined) { const v = turn(o.vx, o.vy); o.vx = v.x; o.vy = v.y; }
-    if (o.kx !== undefined) { const v = turn(o.kx, o.ky); o.kx = v.x; o.ky = v.y; }
-    if (o.r0 !== undefined) { const v = turn(Math.cos(o.ang), Math.sin(o.ang)); o.ang = Math.atan2(v.y, v.x); } // a shot's heading
-    return true;
+  for (let k = 0; k < room.holes.length; k++) {
+    const h = room.holes[k];
+    if (hyp(o.x - h.x, o.y - h.y) < h.r) { holeEnter(o, k); return true; }
   }
   return false;
 }
-const _tn = { x: 0, y: 0 };
 // Direction and distance from a point to the pilot by the shortest route, teleporters included,
 // so pulls and pushes act through them.
 const _tv = { x: 0, y: 0, d: 0 };
@@ -87,7 +111,8 @@ function toPilot(x, y) {
   }
   for (const h of room.holes) {
     const t = room.holes[h.to], a = hyp(h.x - x, h.y - y);
-    if (a > 1 && a + hyp(P.x - t.x, P.y - t.y) < d) { d = a + hyp(P.x - t.x, P.y - t.y); bx = (h.x - x) / a; by = (h.y - y) / a; }
+    const far = a + 2 * h.r + hyp(P.x - t.x, P.y - t.y); // to the ring, down the tube, on to the pilot
+    if (a > 1 && far < d) { d = far; bx = (h.x - x) / a; by = (h.y - y) / a; }
   }
   _tv.x = bx; _tv.y = by; _tv.d = d;
   return _tv;
@@ -165,7 +190,7 @@ function enterRoom(room, dir) {
   R.shots = []; R.bullets = []; R.enemies = []; R.arcs = []; R.booms = []; R.mines = []; R.trails = [];
   R.pickups = room.pickups; R.flipRule = false; R.line = null; P.vq = [];
   if (dir) { const d = DOOR_POS[OPP[dir]]; P.x = d[0] + DIRV[dir][0] * 34; P.y = d[1] + DIRV[dir][1] * 34; }
-  P.kx = P.ky = 0; P.hit = false; P.tp = null; R.nav = null; R.navT = -9;
+  P.kx = P.ky = 0; P.hit = false; P.tu = null; R.nav = null; R.navT = -9;
   for (const d of P.drones) { d.x = P.x; d.y = P.y; }
   R.orbs = []; R.slashes = []; P.hist = []; P.fl.x = P.x; P.fl.y = P.y; P.fl.vx = P.fl.vy = 0;
   room.visited = room.seen = true;
@@ -329,6 +354,11 @@ function absorbBullet(b) {
 
 function updatePlayer(dt) {
   const P = R.P, s = P.stats, room = R.room;
+  if (P.tu) { // riding a wormhole: no steering until it lets go
+    tubeStep(P, dt); P.firing = false; P.inv = Math.max(P.inv, .1);
+    if (IN.hit('Space') || IN.mhit[2]) flipPolarity();
+    return;
+  }
   let mx = (IN.down('KeyD') ? 1 : 0) - (IN.down('KeyA') ? 1 : 0), my = (IN.down('KeyS') ? 1 : 0) - (IN.down('KeyW') ? 1 : 0);
   if (hyp(IN.padMove.x, IN.padMove.y) > .25) { mx = IN.padMove.x; my = IN.padMove.y; }
   const l = Math.max(1, hyp(mx, my)), k = 1 - Math.exp(-dt * 16);
@@ -393,6 +423,7 @@ function updateBullets(dt) {
   for (const b of R.bullets) {
     if (b.dead) continue;
     b.t += dt;
+    if (b.tu) { tubeStep(b, dt); continue; }
     if (b.cv) { const c = Math.cos(b.cv * dt), sn = Math.sin(b.cv * dt), vx = b.vx; b.vx = vx * c - b.vy * sn; b.vy = vx * sn + b.vy * c; }
     for (const w of R.wells) {
       const dx = w.x - b.x, dy = w.y - b.y, d = hyp(dx, dy) || 1, wf = b.free ? 0 : wellF(w, d);
@@ -423,7 +454,7 @@ function updateBullets(dt) {
     for (const g of R.room.gates) if (g.pol !== b.pol && b.x > g.x && b.x < g.x + g.w && b.y > g.y && b.y < g.y + g.h) { b.dead = true; fxParts(b.x, b.y, PAL.pc[g.pol], 1, 80); break; }
     if (b.dead) continue;
     let dx = b.x - P.x, dy = b.y - P.y, d2 = dx * dx + dy * dy;
-    const im = R.room.holes.length || R.room.wraps.length ? holeImage(b.x, b.y) : null;
+    const im = R.room.wraps.length ? holeImage(b.x, b.y) : null;
     if (im && (im.x - P.x) * (im.x - P.x) + (im.y - P.y) * (im.y - P.y) < d2) { dx = im.x - P.x; dy = im.y - P.y; d2 = dx * dx + dy * dy; }
     if (s.repel && b.pol !== P.pol) { // a gentle shove: it bends paths, it does not stop them
       const tv = toPilot(b.x, b.y);
@@ -445,6 +476,7 @@ function updatePickups(dt) {
   for (let i = list.length - 1; i >= 0; i--) {
     const p = list[i]; p.t += dt;
     if (p.lock) { if (obs.includes(p.lock)) continue; p.lock = null; } // sealed in a vault
+    if (p.tu) { tubeStep(p, dt); continue; }
     if (p.vx) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .9; p.vy *= .9; }
     if (!(p.kind === 'heart' && P.hp >= s.maxHp)) {
       const tv = toPilot(p.x, p.y); // the magnet reaches through teleporters

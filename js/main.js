@@ -42,7 +42,7 @@
       }
       G.god = true;
       if (hash.includes('atwall')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.wraps = [{ l0: 120, r0: 460, h: 140 }]; }
-      if (hash.includes('athole')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.holes = [{ x: 420, y: 330, r: 40, to: 1 }, { x: 860, y: 420, r: 40, to: 0 }]; }
+      if (hash.includes('athole')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.holes = [{ x: 420, y: 330, r: 56, to: 1 }, { x: 860, y: 420, r: 56, to: 0 }]; }
       if (hash.includes('pause')) setTimeout(() => { G.state = 'pause'; }, 300);
       const pre = /-t(\d+)/.exec(hash.replace("title", "").replace("treasure", "").replace("stage", ""));
       for (let i = 0; pre && i < +pre[1] * 60; i++) { demoStep(hash); frame(1 / 60); IN.end(); }
@@ -61,7 +61,7 @@
     if (G.demo && R && G.state === 'play') demoStep(hash);
     frame(dt);
     const o = render(ctx);
-    if (usePost) { o.overlay = o.ov ? over : null; POST.draw(scene, o.src, o); }
+    if (usePost) { o.overlay = o.ov ? over : null; o.tube = o.ov ? G.tube : null; POST.draw(scene, o.src, o); }
     IN.end();
     requestAnimationFrame(tick);
   }
@@ -87,10 +87,11 @@ function demoAtWall() {
 function demoAtHole() {
   const h = R.room.holes[0], t = R.room.holes[1], P = R.P;
   if (!h) return;
-  P.x = h.x - h.r - 3; P.y = h.y; IN.keys = {}; IN.mb[0] = false; IN.mouseAim = false;
+  P.x = h.x; P.y = h.y - h.r - 3; P.tu = null; IN.keys = {}; IN.mb[0] = false; IN.mouseAim = false;
   if (!R.demoE) { R.demoE = makeEnemy('drifter', 0, 0, 1, 0); R.demoE.def = Object.assign({}, R.demoE.def, { ai() { } }); }
   R.demoE.x = h.x + (h.r + 5) * Math.cos(1.1); R.demoE.y = h.y + (h.r + 5) * Math.sin(1.1); R.demoE.vx = R.demoE.vy = 0; R.demoE.rot = .3; R.demoE.hp = R.demoE.maxHp;
-  if (R.time % .16 < .017) for (const k of [-1, 0, 1]) eb(t.x + 190, t.y + k * 22, Math.PI, 110, (k + 1) & 1, 9, { bn: 0 });
+  R.demoE.tu = null;
+  if (R.time % .3 < .017) for (const k of [-1, 0, 1]) eb(t.x + 220, t.y + k * 30, Math.PI, 110, (k + 1) & 1, 9, { bn: 0 });
 }
 
 // screenshot helper: park on the room's first pedestal and fire

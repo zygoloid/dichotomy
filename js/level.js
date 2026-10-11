@@ -144,8 +144,8 @@ function genVault(r) {
 // Teleporters laid over whatever else the room has.
 function genTeleporters(r) {
   if (META.un['tele:hole'] && chance(r.layout === 'maze' ? .5 : .25)) for (let g = 0; g < 40; g++) {
-    const a = { x: rand(160, 450), y: rand(140, 580), r: 40, to: 1 }, b = { x: rand(830, 1120), y: rand(140, 580), r: 40, to: 0 };
-    const bad = p => Math.abs(p.y - H / 2) < 90 && (p.x < 260 || p.x > 1020) || r.obs.concat(r.gates, r.noSpawn).some(o => circRect(p.x, p.y, 70, o));
+    const a = { x: rand(180, 440), y: rand(160, 560), r: 56, to: 1 }, b = { x: rand(840, 1100), y: rand(160, 560), r: 56, to: 0 };
+    const bad = p => Math.abs(p.y - H / 2) < 110 && (p.x < 290 || p.x > 990) || r.obs.concat(r.gates, r.noSpawn).some(o => circRect(p.x, p.y, 92, o));
     if (bad(a) || bad(b)) continue;
     r.holes = [a, b]; break;
   }

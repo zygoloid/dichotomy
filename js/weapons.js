@@ -312,6 +312,7 @@ function killShot(sh) {
 function stepShot(sh, dt, scan) {
   const P = R.P, s = P.stats;
   sh.t += dt;
+  if (sh.tu) { if (sh.t >= sh.life) killShot(sh); else tubeStep(sh, dt); return; } // riding a wormhole
   const f = sh.t / sh.life;
   if (f >= 1) {
     if (s.flak && !sh.kid) explodeAt(sh.x, sh.y, 52 * Math.sqrt(s.flak) * (.7 + sh.r / 16), sh.dmg * .5, null, sh.pol);
@@ -355,7 +356,7 @@ function stepShot(sh, dt, scan) {
     if (P.fus.rain && sh.frag > 0) for (let i = 0; i < 2; i++) spawnShot(sh.x, sh.y, rand(TAU), { dmg: sh.dmg * .35, pol: sh.pol, split: 0, frag: 0, size: .7, life: .35, proj: !sh.beam, kid: true });
     fxParts(sh.x, sh.y, PAL.pc[sh.pol], 2, 100);
   }
-  const im = R.room.holes.length || R.room.wraps.length ? holeImage(sh.x, sh.y) : null, ix = im ? im.x : 0, iy = im ? im.y : 0; // the shot's shadow through a wormhole
+  const im = R.room.wraps.length ? holeImage(sh.x, sh.y) : null, ix = im ? im.x : 0, iy = im ? im.y : 0; // the shot's shadow through a wormhole
   for (const e of R.enemies) {
     if (e.dead || e.spawn > 0 || (sh.hit && sh.hit.has(e))) continue;
     const dx = e.x - sh.x, dy = e.y - sh.y, rr = e.r + sh.r;
@@ -393,7 +394,7 @@ function updateShots(dt) {
       const px = sh.x, py = sh.y;
       stepShot(sh, step, scan);
       if (hyp(sh.x - px, sh.y - py) > 60) { trail(cur); cur = [sh.x, sh.y]; } // it teleported: start a new piece
-      else if (i % 2 || sh.dead) cur.push(sh.x, sh.y);
+      else if (!sh.tu && (i % 2 || sh.dead)) cur.push(sh.x, sh.y);
     }
     killShot(sh);
     trail(cur);
