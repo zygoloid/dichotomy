@@ -151,7 +151,7 @@ function giveUp(id) {
   const after = P.stats.maxHp;
   if (after > before) P.hp += after - before;
   P.hp = clamp(P.hp, 1, after);
-  P.charge = Math.min(P.charge, P.stats.chargeMax);
+  P.charge = Math.min(P.charge, chargeCap());
   mAdd('taken');
   AU.sfx('take'); fxRing(P.x, P.y, .06, 600, .6);
   fxParts(P.x, P.y, TIER_COL[UP[id].tier], 24, 300);
@@ -195,12 +195,12 @@ function flipPolarity() {
 function absorbBullet(b) {
   const P = R.P, s = P.stats;
   b.dead = true;
-  if (s.overflow && chg() >= s.chargeMax) {
+  if (s.overflow && chg() >= chargeCap()) {
     // overflow: charge that would be wasted leaves as homing shots
     P.ofl += .5 * s.overflow;
     while (P.ofl >= 1) { P.ofl--; spawnShot(P.x, P.y, rand(TAU), { dmg: shotDmg(), pol: P.pol, hom: 6, proj: true }); }
   }
-  P.charge = Math.min(s.chargeMax, P.charge + 2.2 * s.gain);
+  addCharge(2.2 * s.gain);
   if (!b.demo) { R.st.absorbed++; mAdd('absorbed'); }
   if (s.reflect) {
     P.refl += s.reflect * .34;
@@ -222,7 +222,7 @@ function updatePlayer(dt) {
   const l = Math.max(1, hyp(mx, my)), k = 1 - Math.exp(-dt * 16);
   const mv = s.move * (1 + .25 * s.flux * chgFrac());
   P.vx = lerp(P.vx, mx / l * mv, k); P.vy = lerp(P.vy, my / l * mv, k);
-  if (s.trickle) P.charge = Math.min(s.chargeMax, P.charge + 3 * s.trickle * dt);
+  if (s.trickle) addCharge(3 * s.trickle * dt);
   const kd = Math.exp(-dt * 6); P.kx *= kd; P.ky *= kd;
   let px = 0, py = 0;
   for (const w of R.wells) {
@@ -306,7 +306,7 @@ function updateBullets(dt) {
     else if (!b.gz && d2 < (hR + b.r + 20) * (hR + b.r + 20) && P.inv <= 0) {
       b.gz = true; if (!b.demo) mAdd('grazes'); AU.sfx('graze');
       R.parts.push({ x: P.x + dx * .5, y: P.y + dy * .5, vx: rand(-60, 60), vy: rand(-60, 60), t: 0, life: .25, col: '#ffffff', s: 3, rot: 0 });
-      if (s.graze) { P.charge = Math.min(s.chargeMax, P.charge + 3 * s.graze * s.gain); P.rateBuff = 1 + .5 * s.graze; }
+      if (s.graze) { addCharge(3 * s.graze * s.gain); P.rateBuff = 1 + .5 * s.graze; }
     }
   }
   if (R.bullets.some(b => b.dead)) R.bullets = R.bullets.filter(b => !b.dead);

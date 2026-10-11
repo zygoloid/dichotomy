@@ -13,7 +13,7 @@ function baseStats() {
     bwave: 0, baegis: 0, bfocus: 0, bpolar: 0, deadman: 0, overflow: 0, dynamo: 0, flux: 0, vacuum: 0, trickle: 0, corona: 0,
     spinup: 0, blade: 0, rail: 0, orb: 0, flak: 0, convert: 0, ghost: 0, flail: 0, swarm: 0, map: 0,
     // pilot
-    maxHp: 4, move: 300, hitR: 5, absorbR: 26, magnet: 90, luck: 0, chargeMax: 100, gain: 1, burstN: 1,
+    maxHp: 4, move: 300, hitR: 5, absorbR: 26, magnet: 90, luck: 0, chargeMax: 100, rings: 1, gain: 1, burstN: 1,
     burstDmg: 1, nova: 0, flipLock: 0, reflect: 0, graze: 0, flipSlow: 0, thorns: 0, shield: 0, vamp: 0,
     greed: 0, inv: 1.1, bulletSpd: 1
   };
@@ -73,6 +73,7 @@ U('contrast', 1, 'C5,5,4;F5,1,5,9,3,8.5,1.4,6.8,1,5,1.4,3.2,3,1.5', s => { s.opp
 U('flux', 0, 'L1,8,4,2,7,8;F8.5,1,6.5,4.5,8,4.5,7,8,9.5,3.5,8.2,3.5', s => { s.flux += 1; }, 'bursts', 5);
 U('dynamo', 1, 'F5,1,1.5,5.5,4,5.5,3,9,6.5,4.5,4,4.5;P7.5,1,9.5,3,7.5,5,5.5,3', s => { s.dynamo += 1; });
 U('trickle', 1, 'P5,1.5,7.5,6,5,9,2.5,6;L5,5,5,7', s => { s.trickle += 1; s.gain *= 0.75; });
+U('tank', 1, 'P1,1.8,9,1.8,9,4.4,1,4.4;P1,5.6,9,5.6,9,8.2,1,8.2;L3,3.1,7,3.1;L3,6.9,5,6.9', s => { s.rings += 1; }, 'bursts', 10);
 U('bwave', 1, 'D5,5,1;R5,5,3,-60,60;R5,5,3,120,240;R5,5,4.6,-60,60;R5,5,4.6,120,240', s => { s.bwave += 1; }, 'bursts', 15);
 U('baegis', 1, 'P5,1,9,3,9,6,5,9,1,6,1,3;D5,5,1.5', s => { s.baegis += 1; }, 'bursts', 40);
 U('deadman', 1, 'P5,1,9,3,9,6,5,9,1,6,1,3;F6,2.5,3.5,5.5,5,5.5,4,8,6.8,4.6,5.2,4.6', s => { s.deadman += 1; }, 'hits', 30);

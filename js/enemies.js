@@ -506,7 +506,7 @@ function updateEnemies(dt) {
       const ds = segDist(P.x, P.y, e.x, e.y, e.x + Math.cos(b.ang) * L, e.y + Math.sin(b.ang) * L);
       if (b.pol === P.pol) {
         if (ds < 8 + P.stats.absorbR * .5) {
-          P.charge = Math.min(P.stats.chargeMax, P.charge + 30 * dt * P.stats.gain);
+          addCharge(30 * dt * P.stats.gain);
           if (chance(dt * 30)) { fxParts(P.x, P.y, PAL.pc[b.pol], 1, 160); AU.sfx('absorb', P.charge); }
         }
       } else if (ds < 5 + P.stats.hitR) hurtPlayer();

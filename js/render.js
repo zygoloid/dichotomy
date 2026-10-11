@@ -286,9 +286,14 @@ function drawPlayer(c) {
     c.strokeStyle = rgba(col, .35 + .2 * Math.sin(G.t * 12)); c.lineWidth = 3; c.setLineDash([6, 9]); c.lineDashOffset = G.t * 60;
     c.beginPath(); c.arc(P.x, P.y, s.absorbR * 2.6, 0, TAU); c.stroke(); c.setLineDash([]);
   }
+  for (let i = 1; i < s.rings; i++) if (chgFrac() > i) {
+    // reserve rings sit outside the first
+    c.strokeStyle = '#fff'; c.lineWidth = 3;
+    c.beginPath(); c.arc(P.x, P.y, s.absorbR + 5 + i * 6, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, chgFrac() - i)); c.stroke();
+  }
   if (chg() > 0) {
     c.strokeStyle = chg() >= 20 ? '#fff' : rgba(col, .6); c.lineWidth = 3;
-    c.beginPath(); c.arc(P.x, P.y, s.absorbR + 5, -Math.PI / 2, -Math.PI / 2 + TAU * chgFrac()); c.stroke();
+    c.beginPath(); c.arc(P.x, P.y, s.absorbR + 5, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, chgFrac())); c.stroke();
   }
   if (P.lockT > 0) { c.strokeStyle = BAD; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 19, 0, TAU * P.lockT / s.flipLock); c.stroke(); }
   if (s.ghost && P.hist.length) {
@@ -484,8 +489,12 @@ function drawHUD(c) {
   for (let i = 0; i < P.sh; i++) { c.strokeStyle = '#9fe8ff'; c.lineWidth = 2; polyPath(c, 30 + ((s.maxHp + i) % 12) * 24, 24, 8, 6, 0); c.stroke(); }
   // charge
   const bw = 170 * Math.min(2, s.chargeMax / 100), f = chgFrac();
-  c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 1; c.strokeRect(20.5, 44.5, bw, 7);
-  c.fillStyle = P.preview ? rgba(col, .6 + .4 * Math.sin(G.t * 8)) : P.charge >= 20 ? col : rgba(col, .5); c.fillRect(21, 45, (bw - 1) * f, 6);
+  for (let i = 0; i < s.rings; i++) {
+    // one bar per ring, stacked
+    const y = 44.5 + i * 9;
+    c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 1; c.strokeRect(20.5, y, bw, 7);
+    c.fillStyle = P.preview ? rgba(col, .6 + .4 * Math.sin(G.t * 8)) : chg() >= 20 ? col : rgba(col, .5); c.fillRect(21, y + .5, (bw - 1) * clamp(f - i, 0, 1), 6);
+  }
   c.fillStyle = '#fff'; c.fillRect(20 + bw * 20 / s.chargeMax, 43, 1.5, 10);
   // chain pips
   for (let i = 0; i < 3; i++) {
@@ -494,7 +503,7 @@ function drawHUD(c) {
   }
   if (P.chain > 0) num(c, '×' + P.chain, bw + 78, 48, SHARD);
   // shards
-  c.fillStyle = SHARD; polyPath(c, 28, 72, 7, 4, 0); c.fill(); num(c, P.shards, 42, 72, SHARD);
+  c.fillStyle = SHARD; polyPath(c, 28, 72 + (s.rings - 1) * 9, 7, 4, 0); c.fill(); num(c, P.shards, 42, 72 + (s.rings - 1) * 9, SHARD);
   // stage pips
   for (let i = 0; i < R.nStages; i++) {
     polyPath(c, 960 + i * 18, 24, 6, 4, 0);

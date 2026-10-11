@@ -9,8 +9,12 @@ const polMul = (pol, e) => pol !== e.pol ? R.P.stats.oppMul : R.P.stats.sameMul;
 const noHurt = pol => R.P.stats.sameMul <= 0 ? pol : undefined;
 
 // Charge as the weapon systems see it: bottomless while an upgrade is being tried on a pedestal.
-const chg = () => R.P.preview ? R.P.stats.chargeMax : R.P.charge;
+// The meter is one or more rings of chargeMax each. chgFrac counts rings, so it runs past 1
+// with a reserve tank; a burst only ever spends one ring.
+const chargeCap = () => R.P.stats.chargeMax * R.P.stats.rings;
+const chg = () => R.P.preview ? chargeCap() : R.P.charge;
 const chgFrac = () => chg() / R.P.stats.chargeMax;
+const addCharge = n => { R.P.charge = Math.min(chargeCap(), R.P.charge + n); };
 function spendCharge(n) { if (!R.P.preview) R.P.charge = Math.max(0, R.P.charge - n); }
 
 function shotDmg() {
@@ -20,7 +24,7 @@ function shotDmg() {
   if (s.berserk) d *= 1 + s.berserk * .2 * Math.max(0, s.maxHp - P.hp);
   d *= 1 + .06 * Math.min(P.chain, 8); // chain overdrive
   if (s.dynamo) d *= 1 + .8 * s.dynamo * chgFrac();
-  if (s.vacuum) d *= 1 + .6 * s.vacuum * (1 - chgFrac());
+  if (s.vacuum) d *= 1 + .6 * s.vacuum * Math.max(0, 1 - chgFrac());
   return Math.max(1, d);
 }
 
@@ -166,7 +170,7 @@ function updateSecondary(dt) {
 }
 
 function releaseBurst() {
-  const P = R.P, s = P.stats, c = chg(), f = chgFrac();
+  const P = R.P, s = P.stats, c = Math.min(chg(), s.chargeMax), f = c / s.chargeMax;
   if (c < 20) { AU.sfx('deny'); return false; }
   const n = Math.max(2, Math.round(c / 100 * 12 * s.burstN)), d = shotDmg() * 1.6 * s.burstDmg * (1 + .25 * s.bfocus);
   for (let i = 0; i < n; i++) {
@@ -191,7 +195,7 @@ function releaseBurst() {
     for (const b of R.bullets) if (!b.fix && b.pol !== P.pol && hyp(b.x - P.x, b.y - P.y) < rad) { b.pol = P.pol; fxParts(b.x, b.y, PAL.pc[b.pol], 1, 80); }
   }
   if (s.baegis) P.inv = Math.max(P.inv, (.6 + 1.2 * f) * s.baegis);
-  if (!P.preview) { P.charge = 0; R.st.bursts++; mAdd('bursts'); }
+  if (!P.preview) { P.charge -= c; R.st.bursts++; mAdd('bursts'); }
   fxRing(P.x, P.y, .07, 700, .7); fxShake(8); AU.sfx('burst');
   return true;
 }

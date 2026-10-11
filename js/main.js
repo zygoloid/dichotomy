@@ -81,5 +81,5 @@ function demoBot() {
   let nb = null, nd = 160 * 160;
   for (const b of R.bullets) { const d = (b.x - P.x) * (b.x - P.x) + (b.y - P.y) * (b.y - P.y); if (d < nd) { nd = d; nb = b; } }
   if (nb ? nb.pol !== P.pol : e && e.pol === P.pol && P.stats.sameMul <= 0) IN.pressed.Space = true;
-  if (P.charge >= P.stats.chargeMax) IN.pressed.KeyQ = true;
+  if (P.charge >= chargeCap()) IN.pressed.KeyQ = true;
 }
