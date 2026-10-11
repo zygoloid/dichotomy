@@ -11,7 +11,7 @@ const POST = {
 in vec2 a; out vec2 uv; void main(){ uv=a*.5+.5; gl_Position=vec4(a,0.,1.); }`;
     const fs = `#version 300 es
 precision highp float;
-uniform sampler2D T; uniform vec2 R;
+uniform sampler2D T; uniform sampler2D O; uniform float useO; uniform vec2 R;
 uniform vec4 src[16]; uniform float typ[16];
 uniform vec4 hole[4]; // wormhole rings as pairs (0,1) and (2,3): centre.xy, radius; radius 0 = unused
 uniform float ca, pulse, inv, bloom, vig;
@@ -29,9 +29,9 @@ void main(){
     }
   }
   // Wormholes. Inside a ring: sample the scene outside its twin through the inversion, fading
-  // toward the centre (which is the far distance). Just outside a ring: add whatever is poking
-  // inside the twin, through the same map, so an object straddling a ring is whole on both sides.
-  float dim=1.; vec3 poke=vec3(0.);
+  // toward the centre (which is the far distance). Objects overlapping a ring are instead drawn
+  // whole, undistorted, on the overlay layer O (see drawWorld), which is composited on top below.
+  float dim=1.; vec2 p1=p;
   for(int i=0;i<4;i++){
     float hr=hole[i].z; if(hr<=0.) continue;
     int j=(i/2)*2+1-(i-(i/2)*2);
@@ -39,15 +39,14 @@ void main(){
     if(rho<hr){
       vec2 m=-d*(hr*hr/max(rho*rho,1e-7)); m.x/=asp; p=hole[j].xy+m;
       dim=smoothstep(.1,.55,rho/hr); break;
-    } else if(rho<hr*2.){
-      vec2 m=-d*(hr*hr/(rho*rho)); m.x/=asp; poke=max(poke,texture(T,hole[j].xy+m).rgb);
     }
   }
   vec2 c=p-.5; float e=cab*(.4+dot(c,c)*3.);
   vec3 col=vec3(texture(T,p+c*e).r, texture(T,p).g, texture(T,p-c*e).b);
   vec3 bl=textureLod(T,p,2.5).rgb*.4+textureLod(T,p,4.).rgb*.4+textureLod(T,p,5.5).rgb*.35;
   col+=bl*bloom;
-  col=max(col*dim,poke);
+  col*=dim;
+  if(useO>.5){ vec4 ov=texture(O,p1); col=mix(col,ov.rgb,ov.a)+textureLod(O,p1,3.).rgb*.5; }
   col=mix(col,1.-col,inv);
   col*=1.-vig*dot(c,c)*1.5;
   if(p.x<0.||p.x>1.||p.y<0.||p.y>1.) col*=.25;
@@ -70,8 +69,16 @@ void main(){
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
       this.u = {};
-      for (const n of ['T', 'R', 'src', 'typ', 'hole', 'ca', 'pulse', 'inv', 'bloom', 'vig']) this.u[n] = gl.getUniformLocation(pr, n);
-      gl.uniform1i(this.u.T, 0);
+      for (const n of ['T', 'O', 'useO', 'R', 'src', 'typ', 'hole', 'ca', 'pulse', 'inv', 'bloom', 'vig']) this.u[n] = gl.getUniformLocation(pr, n);
+      gl.uniform1i(this.u.T, 0); gl.uniform1i(this.u.O, 1);
+      // second texture: the overlay layer
+      this.tex2 = gl.createTexture(); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.tex2);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+      gl.activeTexture(gl.TEXTURE0);
       this.srcA = new Float32Array(this.MAX * 4); this.typA = new Float32Array(this.MAX); this.holeA = new Float32Array(16);
     } catch (e) { console.warn('post-process disabled:', e); return false; }
     this.gl = gl; this.ok = true;
@@ -83,6 +90,12 @@ void main(){
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scene);
     gl.generateMipmap(gl.TEXTURE_2D);
+    if (o.overlay) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, o.overlay); gl.generateMipmap(gl.TEXTURE_2D);
+      gl.activeTexture(gl.TEXTURE0);
+    }
+    gl.uniform1f(this.u.useO, o.overlay ? 1 : 0);
     this.typA.fill(0);
     const n = Math.min(sources.length, this.MAX);
     for (let i = 0; i < n; i++) {

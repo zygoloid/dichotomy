@@ -93,7 +93,15 @@ function drawRoomFrame(c) {
     const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, ux = Math.sign(x1 - x0), uy = Math.sign(y1 - y0);
     c.moveTo(x0, y0); c.lineTo(mx - ux * g, my - uy * g); c.moveTo(mx + ux * g, my + uy * g); c.lineTo(x1, y1);
   };
-  side(BX0, BY0, BX1, BY0, 'n'); side(BX1, BY0, BX1, BY1, 'e'); side(BX0, BY1, BX1, BY1, 's'); side(BX0, BY0, BX0, BY1, 'w');
+  const vwall = (x, d) => { // a side wall, broken by its door and by any linked stretches
+    const gaps = room.wraps.map(w => { const y0 = d === 'w' ? w.l0 : w.r0; return [y0, y0 + w.h]; });
+    if (D[d]) gaps.push([H / 2 - g, H / 2 + g]);
+    gaps.sort((p, q) => p[0] - q[0]);
+    let y = BY0;
+    for (const [a, b] of gaps) { c.moveTo(x, y); c.lineTo(x, a); y = b; }
+    c.moveTo(x, y); c.lineTo(x, BY1);
+  };
+  side(BX0, BY0, BX1, BY0, 'n'); vwall(BX1, 'e'); side(BX0, BY1, BX1, BY1, 's'); vwall(BX0, 'w');
   c.stroke();
   const TC = { boss: BAD, treasure: SHARD, shop: GOOD, challenge: '#b98cff', altar: HEART, mini: '#ff8a3d', secret: '#ffffff' };
   if (room.hidden) {
@@ -228,32 +236,39 @@ function drawBullets(c) {
   for (let pol = 0; pol < 2; pol++) {
     const col = PAL.pc[warn ? pol ^ 1 : pol];
     c.beginPath();
-    for (const b of R.bullets) if (b.pol === pol) { c.moveTo(b.x + b.r, b.y); c.arc(b.x, b.y, b.r, 0, TAU); }
+    for (const b of R.bullets) if (b.pol === pol && !b.strad) { c.moveTo(b.x + b.r, b.y); c.arc(b.x, b.y, b.r, 0, TAU); }
     if (pol === 0) {
       c.fillStyle = col; c.fill();
       c.beginPath();
-      for (const b of R.bullets) if (b.pol === 0) { c.moveTo(b.x + b.r * .5, b.y); c.arc(b.x, b.y, b.r * .5, 0, TAU); }
+      for (const b of R.bullets) if (b.pol === 0 && !b.strad) { c.moveTo(b.x + b.r * .5, b.y); c.arc(b.x, b.y, b.r * .5, 0, TAU); }
       c.fillStyle = '#fff'; c.fill();
     } else { c.fillStyle = '#000'; c.fill(); c.strokeStyle = col; c.lineWidth = 2.8; c.stroke(); }
   }
 }
+function drawBullet(c, b) { // one bullet, as drawBullets would draw it
+  const col = PAL.pc[b.pol];
+  c.beginPath(); c.arc(b.x, b.y, b.r, 0, TAU);
+  if (b.pol === 0) { c.fillStyle = col; c.fill(); c.beginPath(); c.arc(b.x, b.y, b.r * .5, 0, TAU); c.fillStyle = '#fff'; c.fill(); }
+  else { c.fillStyle = '#000'; c.fill(); c.strokeStyle = col; c.lineWidth = 2.8; c.stroke(); }
+}
 
+function drawShot(c, sh) {
+  const col = PAL.pc[sh.pol], cs = Math.cos(sh.ang), sn = Math.sin(sh.ang), l = sh.r * (sh.burst ? 3.2 : 2.4), w = sh.r * .8;
+  if (R.P.stats.crescent && !sh.burst) { // a wide blade of light instead of a dart
+    c.strokeStyle = rgba(col, .85); c.lineWidth = Math.max(2.5, sh.r * .3);
+    c.beginPath(); c.arc(sh.x - cs * sh.r * .9, sh.y - sn * sh.r * .9, sh.r * 1.35, sh.ang - .8, sh.ang + .8); c.stroke();
+    return;
+  }
+  c.fillStyle = rgba(col, sh.pol ? .75 : .6);
+  c.beginPath();
+  c.moveTo(sh.x + cs * l, sh.y + sn * l); c.lineTo(sh.x - sn * w, sh.y + cs * w);
+  c.lineTo(sh.x - cs * l, sh.y - sn * l); c.lineTo(sh.x + sn * w, sh.y - cs * w);
+  c.fill();
+  if (sh.pol === 0) { c.fillStyle = 'rgba(255,255,255,.7)'; c.fillRect(sh.x - 1.5, sh.y - 1.5, 3, 3); }
+}
 function drawShots(c) {
   c.globalCompositeOperation = 'lighter';
-  for (const sh of R.shots) {
-    const col = PAL.pc[sh.pol], cs = Math.cos(sh.ang), sn = Math.sin(sh.ang), l = sh.r * (sh.burst ? 3.2 : 2.4), w = sh.r * .8;
-    if (R.P.stats.crescent && !sh.burst) { // a wide blade of light instead of a dart
-      c.strokeStyle = rgba(col, .85); c.lineWidth = Math.max(2.5, sh.r * .3);
-      c.beginPath(); c.arc(sh.x - cs * sh.r * .9, sh.y - sn * sh.r * .9, sh.r * 1.35, sh.ang - .8, sh.ang + .8); c.stroke();
-      continue;
-    }
-    c.fillStyle = rgba(col, sh.pol ? .75 : .6);
-    c.beginPath();
-    c.moveTo(sh.x + cs * l, sh.y + sn * l); c.lineTo(sh.x - sn * w, sh.y + cs * w);
-    c.lineTo(sh.x - cs * l, sh.y - sn * l); c.lineTo(sh.x + sn * w, sh.y - cs * w);
-    c.fill();
-    if (sh.pol === 0) { c.fillStyle = 'rgba(255,255,255,.7)'; c.fillRect(sh.x - 1.5, sh.y - 1.5, 3, 3); }
-  }
+  for (const sh of R.shots) if (!sh.strad) drawShot(c, sh);
   c.globalCompositeOperation = 'source-over';
 }
 
@@ -347,6 +362,15 @@ function drawPlayer(c) {
 
 function drawWorld(c) {
   const room = R.room, P = R.P;
+  // which objects overlap a wormhole ring (o.strad = that ring); they are drawn on the overlay
+  const ov = room.holes.length && G.ov ? G.ov : null;
+  const strad = (o, reach) => { for (const h of room.holes) if (Math.abs(hyp(o.x - h.x, o.y - h.y) - h.r) < reach) return h; return null; };
+  P.strad = ov ? strad(P, 15) : null;
+  if (ov) {
+    for (const e of R.enemies) e.strad = strad(e, e.r + 3);
+    for (const sh of R.shots) sh.strad = strad(sh, sh.r * 2.5);
+    for (const b of R.bullets) b.strad = strad(b, b.r + 2);
+  }
   c.save();
   if (R.shake * META.fx > .5) c.translate(rand(-1, 1) * R.shake * META.fx, rand(-1, 1) * R.shake * META.fx);
   drawBG(c, R.beat);
@@ -456,10 +480,10 @@ function drawWorld(c) {
     c.globalAlpha = 1;
   }
   for (const m of R.mines) { polyPath(c, m.x, m.y, 7, 4, 0); polFill(c, R.P.pol, m.t > .4 && Math.sin(m.t * 14) > .6, 1.5); }
-  for (const e of R.enemies) drawEnemy(c, e);
+  for (const e of R.enemies) if (!e.strad) drawEnemy(c, e);
   drawBeams(c);
   drawShots(c);
-  if (G.state !== 'dead') drawPlayer(c);
+  if (G.state !== 'dead' && !P.strad) drawPlayer(c);
   drawBullets(c);
   // Wall links: anything poking out through a linked wall is drawn again where it re-enters,
   // just inside the wall it is linked to, so nothing pops across.
@@ -472,6 +496,32 @@ function drawWorld(c) {
     if (G.state !== 'dead') drawPlayer(c);
     drawBullets(c);
     c.restore();
+  }
+  // Wormholes: anything overlapping a ring was left out of the scene above. It is drawn here on
+  // the overlay layer instead, whole and undistorted, twice: where it is, and as a shadow at
+  // the twin ring. The shadow is the object reflected across the ring and carried over, which
+  // is the wormhole's own map at that point, so as it crosses, the object and its shadow trade
+  // places exactly. Everything else near a wormhole is shown through the shader's warped view.
+  if (ov) {
+    ov.setTransform(1, 0, 0, 1, 0, 0); ov.clearRect(0, 0, W, H);
+    if (c.getTransform) ov.setTransform(c.getTransform());
+    const twice = (o, draw) => {
+      const h = o.strad;
+      if (!h) return;
+      const t = room.holes[h.to], dx = o.x - h.x, dy = o.y - h.y, d = hyp(dx, dy) || 1, nx = dx / d, ny = dy / d, k = 2 * h.r - d;
+      draw(ov);
+      ov.save();
+      ov.translate(t.x - nx * k, t.y - ny * k); ov.transform(2 * nx * nx - 1, 2 * nx * ny, 2 * nx * ny, 2 * ny * ny - 1, 0, 0); ov.translate(-o.x, -o.y);
+      draw(ov);
+      ov.restore();
+    };
+    for (const e of R.enemies) twice(e, k => drawEnemy(k, e));
+    ov.globalCompositeOperation = 'lighter';
+    for (const sh of R.shots) twice(sh, k => drawShot(k, sh));
+    ov.globalCompositeOperation = 'source-over';
+    if (G.state !== 'dead') twice(P, k => drawPlayer(k));
+    for (const b of R.bullets) twice(b, k => drawBullet(k, b));
+    G.ovUsed = true;
   }
   c.globalCompositeOperation = 'lighter';
   for (const b of R.booms) { const k = b.t / .25; c.strokeStyle = rgba('#ffb060', 1 - k); c.lineWidth = 6 * (1 - k) + 1; c.beginPath(); c.arc(b.x, b.y, b.r * (.4 + .6 * k), 0, TAU); c.stroke(); }
@@ -538,10 +588,6 @@ function drawTeleporters(c) {
       tc.globalCompositeOperation = 'source-over';
       c.drawImage(t, s < 0 ? 0 : BX1, dy0);
     }
-  }
-  for (const w of room.wraps) for (const s of [-1, 1]) { // the wall itself is open along the link
-    const x = s < 0 ? BX0 : BX1, y0 = s < 0 ? w.l0 : w.r0;
-    c.strokeStyle = PAL.bg; c.lineWidth = 7; c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y0 + w.h); c.stroke();
   }
   // Wormholes are drawn by the post-process shader (see POST). Without it, mark them plainly.
   if (!POST.ok) for (const h of room.holes) { c.strokeStyle = PAL.wall; c.lineWidth = 2; c.setLineDash([4, 6]); c.beginPath(); c.arc(h.x, h.y, h.r, 0, TAU); c.stroke(); c.setLineDash([]); }
@@ -796,6 +842,7 @@ function drawPause(c) {
 
 // Draws the frame and returns the post-process parameters for it.
 function render(c) {
+  G.ovUsed = false;
   const src = [];
   let ca = .0012, pulse = 0, inv = 0;
   if (G.state === 'title' || G.state === 'gallery') {
@@ -821,5 +868,5 @@ function render(c) {
   // the effects setting scales every warp; the colour-swap flash stays partly visible because it carries information
   const fx = META.fx;
   for (const s of src) s[4] *= fx;
-  return { holes: R && G.state !== 'title' && G.state !== 'gallery' ? R.room.holes : [], src, ca: .0012 + (ca - .0012) * fx, pulse: pulse * fx, inv: inv * (.4 + .6 * fx), bloom: .45 + .4 * fx, vig: 1 };
+  return { ov: G.ovUsed, holes: R && G.state !== 'title' && G.state !== 'gallery' ? R.room.holes : [], src, ca: .0012 + (ca - .0012) * fx, pulse: pulse * fx, inv: inv * (.4 + .6 * fx), bloom: .45 + .4 * fx, vig: 1 };
 }

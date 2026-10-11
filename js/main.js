@@ -7,6 +7,11 @@
   scene.width = W; scene.height = H;
   const ctx = scene.getContext('2d');
   let usePost = POST.init(view);
+  // a transparent layer composited over the post-processed frame; wormholes use it for anything
+  // overlapping a ring
+  const over = document.createElement('canvas');
+  over.width = W; over.height = H;
+  G.ov = usePost ? over.getContext('2d') : null;
   if (!usePost) { view.parentNode.replaceChild(scene, view); scene.id = 'view'; }
   IN.init(usePost ? view : scene);
   loadMeta();
@@ -40,7 +45,7 @@
       if (hash.includes('athole')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.holes = [{ x: 420, y: 330, r: 40, to: 1 }, { x: 860, y: 420, r: 40, to: 0 }]; }
       if (hash.includes('pause')) setTimeout(() => { G.state = 'pause'; }, 300);
       const pre = /-t(\d+)/.exec(hash.replace("title", "").replace("treasure", "").replace("stage", ""));
-      for (let i = 0; pre && i < +pre[1] * 60; i++) { if (hash.includes("atwall")) { R.P.x = BX0 + 4; R.P.y = 190; IN.keys = {}; IN.mb[0] = false; if (R.time % .3 < .02) for (const k of [0, 1, 2]) eb(BX1 - 200, 480 + k * 40, 0, 120, k & 1, 7); } else if (hash.includes("athole")) demoAtHole(); else if (hash.includes("onped")) demoOnPed(); else if (!hash.includes("still")) demoBot(); frame(1 / 60); IN.end(); }
+      for (let i = 0; pre && i < +pre[1] * 60; i++) { demoStep(hash); frame(1 / 60); IN.end(); }
     }
   }
 
@@ -53,22 +58,39 @@
     IN.mouseIdle += dt;
     const cur = IN.mouseAim && (IN.mouseIdle < 3 || IN.mb[0]) ? 'crosshair' : 'none';
     if (IN.canvas.style.cursor !== cur) IN.canvas.style.cursor = cur;
-    if (G.demo && R && G.state === 'play') demoBot();
+    if (G.demo && R && G.state === 'play') demoStep(hash);
     frame(dt);
     const o = render(ctx);
-    if (usePost) POST.draw(scene, o.src, o);
+    if (usePost) { o.overlay = o.ov ? over : null; POST.draw(scene, o.src, o); }
     IN.end();
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
 })();
 
-// screenshot helper: sit beside a wormhole, straddling its ring, with bullets streaming through the twin
+// which autopilot a demo URL asks for; used both for the pre-roll and for live frames
+function demoStep(hash) {
+  if (hash.includes('atwall')) demoAtWall();
+  else if (hash.includes('athole')) demoAtHole();
+  else if (hash.includes('onped')) demoOnPed();
+  else if (!hash.includes('still')) demoBot();
+}
+// screenshot helper for wall links: the ship straddles the left wall while bullets stream out
+// through the right wall and back in beside it
+function demoAtWall() {
+  R.P.x = BX0 + 4; R.P.y = 190; IN.keys = {}; IN.mb[0] = false; IN.mouseAim = false;
+  if (R.time % .3 < .02) for (const k of [0, 1, 2]) eb(BX1 - 200, 480 + k * 40, 0, 120, k & 1, 7);
+}
+// screenshot helper for wormholes: the ship straddles one ring, an enemy straddles it lower
+// down, and three lanes of big bullets stream through the twin so every stage of a crossing
+// is on screen at once
 function demoAtHole() {
   const h = R.room.holes[0], t = R.room.holes[1], P = R.P;
   if (!h) return;
-  P.x = h.x - h.r - 4; P.y = h.y; IN.keys = {}; IN.mb[0] = false;
-  if (R.time % .25 < .02) for (const k of [-1, 0, 1]) eb(t.x + 150, t.y + k * 26, Math.PI, 130, (k + 1) & 1, 7);
+  P.x = h.x - h.r - 3; P.y = h.y; IN.keys = {}; IN.mb[0] = false; IN.mouseAim = false;
+  if (!R.demoE) { R.demoE = makeEnemy('drifter', 0, 0, 1, 0); R.demoE.def = Object.assign({}, R.demoE.def, { ai() { } }); }
+  R.demoE.x = h.x + (h.r + 5) * Math.cos(1.1); R.demoE.y = h.y + (h.r + 5) * Math.sin(1.1); R.demoE.vx = R.demoE.vy = 0; R.demoE.rot = .3; R.demoE.hp = R.demoE.maxHp;
+  if (R.time % .16 < .017) for (const k of [-1, 0, 1]) eb(t.x + 190, t.y + k * 22, Math.PI, 110, (k + 1) & 1, 9, { bn: 0 });
 }
 
 // screenshot helper: park on the room's first pedestal and fire

@@ -39,9 +39,12 @@ function holeImage(x, y) {
     const left = x < W / 2, y0 = left ? w.l0 : w.r0;
     if (y > y0 - 30 && y < y0 + w.h + 30) { _im.x = x + (left ? BX1 - BX0 : BX0 - BX1); _im.y = y + (left ? w.r0 - w.l0 : w.l0 - w.r0); return _im; }
   }
-  for (const h of R.room.holes) {
-    const d2 = (x - h.x) * (x - h.x) + (y - h.y) * (y - h.y);
-    if (d2 < h.r * h.r * 4) return holeMap(h, x, y, _im);
+  for (const h of R.room.holes) { // reflected across the ring, then across to the twin: where its shadow is drawn
+    const dx = x - h.x, dy = y - h.y, d = hyp(dx, dy);
+    if (d >= h.r * 2 || d < 1) continue;
+    const t = R.room.holes[h.to], k = (2 * h.r - d) / d;
+    _im.x = t.x - dx * k; _im.y = t.y - dy * k;
+    return _im;
   }
   return null;
 }
