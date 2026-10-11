@@ -572,13 +572,39 @@ function updateTitle() {
   const ma = maxAsc();
   if (IN.hit('KeyW') || IN.hit('ArrowUp')) META.asc = Math.min(ma, (META.asc || 0) + 1);
   if (IN.hit('KeyS') || IN.hit('ArrowDown')) META.asc = Math.max(0, (META.asc || 0) - 1);
-  if (IN.hit('Tab') || IN.hit('KeyG')) { G.state = 'gallery'; return; }
+  if (IN.hit('Tab') || IN.hit('KeyG')) { G.state = 'gallery'; G.galSel = G.galSel || 0; return; }
   const ship = SHIPS[G.shipSel], ok = ship.id === 'tri' || META.un['ship:' + ship.id];
   if (IN.hit('Space') || IN.hit('Enter') || IN.mhit[0]) {
     AU.init();
     if (!ok) { AU.sfx('deny'); return; }
     META.ship = ship.id; saveMeta(); newRun();
   }
+}
+
+// ---- gallery: a scrolling grid of everything that can be unlocked
+const GAL = { cols: 16, cs: 70, top: 64, bottom: H - 104 };
+const galleryItems = () => UPS.filter(u => !u.hidden).map(u => ({ id: u.id, kind: 'up', stat: u.stat, n: u.n })).concat(UNLOCKS.filter(u => u.kind !== 'up'));
+function updateGallery(dt) {
+  if (IN.hit('Escape') || IN.hit('Tab') || IN.hit('KeyG')) { G.state = 'title'; return; }
+  const n = galleryItems().length, cols = GAL.cols, rows = Math.ceil(n / cols), view = GAL.bottom - GAL.top;
+  let s = G.galSel || 0;
+  if (IN.hit('KeyA') || IN.hit('ArrowLeft')) s -= 1;
+  if (IN.hit('KeyD') || IN.hit('ArrowRight')) s += 1;
+  // up and down keep to the column; stepping down into a short last row lands on its last item
+  const vert = (IN.hit('KeyS') || IN.hit('ArrowDown') ? 1 : 0) - (IN.hit('KeyW') || IN.hit('ArrowUp') ? 1 : 0) + IN.wheel;
+  for (let k = 0; k < Math.abs(vert); k++) {
+    const t = s + Math.sign(vert) * cols;
+    if (t >= 0 && t < n) s = t; else if (t >= n && Math.floor(s / cols) < rows - 1) s = n - 1;
+  }
+  // the mouse picks whatever it is over, but only while it is moving, so it does not fight the keys
+  if (IN.mouseIdle < .05 && IN.my > GAL.top && IN.my < GAL.bottom) {
+    const c = Math.round((IN.mx - (W / 2 - (cols - 1) * GAL.cs / 2)) / GAL.cs), r = Math.round((IN.my - GAL.top - GAL.cs / 2 + (G.galScroll || 0)) / GAL.cs);
+    if (c >= 0 && c < cols && r >= 0 && c + r * cols < n) s = c + r * cols;
+  }
+  G.galSel = s = clamp(s, 0, n - 1);
+  // keep the selected row comfortably inside the window
+  const want = clamp(Math.floor(s / cols) * GAL.cs - view / 2 + GAL.cs / 2, 0, Math.max(0, rows * GAL.cs - view));
+  G.galScroll = lerp(G.galScroll || 0, want, Math.min(1, dt * 12));
 }
 
 function frame(dt) {
@@ -611,7 +637,7 @@ function frame(dt) {
       G.endT += dt; updateFx(dt * .5);
       if (G.endT > 1.2 && (IN.hit('Space') || IN.hit('Enter') || IN.mhit[0])) { G.state = 'title'; PAL = STAGES[0]; }
       break;
-    case 'gallery': if (IN.hit('Escape') || IN.hit('Tab') || IN.hit('KeyG') || IN.mhit[0]) G.state = 'title'; break;
+    case 'gallery': updateGallery(dt); break;
   }
   if (G.toasts.length && (G.toasts[0].t += dt) > 2.2) G.toasts.shift();
   if (G.toasts.length && !G.toasts[0].snd) { G.toasts[0].snd = true; AU.sfx('unlock'); }

@@ -692,34 +692,51 @@ function drawTitle(c) {
 function drawGallery(c) {
   drawBG(c, G.t * 2);
   c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(0, 0, W, H);
-  const items = UPS.filter(u => !u.hidden).map(u => ({ id: u.id, kind: 'up', stat: u.stat, n: u.n })).concat(UNLOCKS.filter(u => u.kind !== 'up'));
-  const cols = 16, cs = 70, x0 = W / 2 - (cols - 1) * cs / 2, y0 = 90;
-  let hov = null, got = 0;
+  const items = galleryItems(), cols = GAL.cols, cs = GAL.cs, x0 = W / 2 - (cols - 1) * cs / 2, scroll = G.galScroll || 0;
+  const rows = Math.ceil(items.length / cols), view = GAL.bottom - GAL.top, sel = G.galSel || 0;
+  let got = 0;
   items.forEach((u, i) => {
-    const x = x0 + (i % cols) * cs, y = y0 + Math.floor(i / cols) * cs, ok = !u.stat || META.un[u.id], col = unlockCol(u);
+    const ok = !u.stat || META.un[u.id];
     if (ok) got++;
-    if (Math.abs(IN.mx - x) < cs / 2 && Math.abs(IN.my - y) < cs / 2) hov = { u, x, y, ok };
+    const x = x0 + (i % cols) * cs, y = GAL.top + cs / 2 + Math.floor(i / cols) * cs - scroll;
+    // rows fade as they slide out past the top or bottom of the window
+    const a = clamp((y - GAL.top + 10) / 45, 0, 1) * clamp((GAL.bottom + 10 - y) / 45, 0, 1);
+    if (a <= 0) return;
+    const col = unlockCol(u);
+    c.globalAlpha = a;
     c.strokeStyle = ok ? rgba(col, .5) : 'rgba(255,255,255,.12)'; c.lineWidth = 1.5; c.strokeRect(x - 28, y - 28, 56, 56);
     drawUnlockIcon(c, u, x, y, 34, ok ? col : 'rgba(255,255,255,.16)');
     if (!ok) {
       c.strokeStyle = '#fff'; c.lineWidth = 2.5;
       c.beginPath(); c.arc(x, y, 24, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, mGet(u.stat) / u.n)); c.stroke();
     }
+    if (i === sel) { c.strokeStyle = '#fff'; c.lineWidth = 2.5; c.strokeRect(x - 31, y - 31, 62, 62); }
+    c.globalAlpha = 1;
   });
   // overall progress bar
   c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.strokeRect(W / 2 - 300.5, 28.5, 601, 11);
   c.fillStyle = GOOD; c.fillRect(W / 2 - 300, 29, 600 * got / items.length, 10);
-  if (hov) {
-    c.strokeStyle = '#fff'; c.lineWidth = 2; c.strokeRect(hov.x - 30, hov.y - 30, 60, 60);
-    if (hov.u.stat) {
-      const y = H - 60;
-      drawUnlockIcon(c, hov.u, W / 2 - 110, y, 40, unlockCol(hov.u));
-      icon(c, 'A1,5,9,5', W / 2 - 60, y, 22, '#fff', 1);
-      icon(c, MSTAT_ICON[hov.u.stat], W / 2 - 14, y, 34, '#fff', 1);
-      num(c, Math.min(mGet(hov.u.stat), hov.u.n) + ' / ' + hov.u.n, W / 2 + 16, y, hov.ok ? GOOD : '#fff');
+  // scroll position, when there is more than fits
+  if (rows * cs > view) {
+    const tx = x0 + cols * cs - 14, th = view * view / (rows * cs), ty = GAL.top + (view - th) * scroll / (rows * cs - view);
+    c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(tx, GAL.top, 3, view);
+    c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(tx, ty, 3, th);
+  }
+  // the selected item and, if it has one, what unlocks it
+  const u = items[sel];
+  if (u) {
+    const y = H - 56, ok = !u.stat || META.un[u.id], col = unlockCol(u);
+    drawUnlockIcon(c, u, W / 2 - 110, y, 40, ok ? col : 'rgba(255,255,255,.35)');
+    if (u.stat) {
+      icon(c, 'A9,5,1,5', W / 2 - 60, y, 22, '#fff', 1);
+      icon(c, MSTAT_ICON[u.stat], W / 2 - 14, y, 34, '#fff', 1);
+      num(c, Math.min(mGet(u.stat), u.n) + ' / ' + u.n, W / 2 + 16, y, ok ? GOOD : '#fff');
     }
   }
   keycap(c, 60, H - 40, 'ESC', 44);
+  c.globalAlpha = .7;
+  keycap(c, W - 150, H - 54, 'W'); keycap(c, W - 180, H - 26, 'A'); keycap(c, W - 150, H - 26, 'S'); keycap(c, W - 120, H - 26, 'D');
+  c.globalAlpha = 1;
 }
 
 function drawEnd(c, win) {

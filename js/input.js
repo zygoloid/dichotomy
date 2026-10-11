@@ -2,7 +2,7 @@
 const IN = {
   keys: {}, pressed: {}, mx: W / 2, my: H / 2, mb: [false, false, false], mhit: [false, false, false],
   canvas: null, any: false, mouseAim: false, mouseIdle: 0,
-  dash: null, tapT: {}, TAP: { KeyW: [0, -1], KeyA: [-1, 0], KeyS: [0, 1], KeyD: [1, 0] },
+  wheel: 0, dash: null, tapT: {}, TAP: { KeyW: [0, -1], KeyA: [-1, 0], KeyS: [0, 1], KeyD: [1, 0] },
   padMove: { x: 0, y: 0 }, padAim: { x: 0, y: 0 }, padPrev: [],
   // Twin-stick pad: left stick moves, right stick aims and fires. Buttons are folded into
   // the same key codes the keyboard uses, so the rest of the game needs no pad logic.
@@ -22,7 +22,7 @@ const IN = {
   },
   down(k) { return !!this.keys[k]; },
   hit(k) { return !!this.pressed[k]; },
-  end() { this.pressed = {}; this.mhit = [false, false, false]; this.any = false; this.dash = null; },
+  end() { this.pressed = {}; this.mhit = [false, false, false]; this.any = false; this.dash = null; this.wheel = 0; },
   init(canvas) {
     this.canvas = canvas;
     const block = { Space: 1, Tab: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1 };
@@ -49,5 +49,6 @@ const IN = {
     window.addEventListener('mousedown', e => { pos(e); if (e.button < 3) { this.mb[e.button] = true; this.mhit[e.button] = true; } this.any = true; });
     window.addEventListener('mouseup', e => { if (e.button < 3) this.mb[e.button] = false; });
     window.addEventListener('contextmenu', e => e.preventDefault());
+    window.addEventListener('wheel', e => { this.wheel += Math.sign(e.deltaY); }, { passive: true });
   }
 };

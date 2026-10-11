@@ -16,7 +16,7 @@
   G.debug = hash.includes('dbg');
   G.demo = hash.includes('demo');
   if (G.demo) {
-    if (hash.includes('gallery')) G.state = 'gallery';
+    if (hash.includes('gallery')) { G.state = 'gallery'; G.galSel = +((/sel(d+)/.exec(hash) || [])[1] || 0); }
     else if (!hash.includes('title')) {
       if (hash.includes('unlockall')) for (const u of UNLOCKS) META.un[u.id] = true;
       newRun();
