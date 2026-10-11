@@ -1,6 +1,7 @@
 // Renders the soundtrack offline in headless Chrome.
 //   node tools/audio_test.js             print level statistics for every song and intensity
 //   node tools/audio_test.js --wav DIR   also write song0.wav .. song4.wav previews into DIR
+//   ... --wav DIR --song N               write only song N (each takes a minute or two)
 const { spawn } = require('child_process'), path = require('path'), os = require('os'), fs = require('fs');
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe', PORT = 9377;
 const page = 'file:///' + path.join(__dirname, 'audio_test.html').split(path.sep).join('/');
@@ -27,10 +28,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     try { await run('new Promise(r => { const t = setInterval(() => { if (window.ready) { clearInterval(t); r(1); } }, 100); })'); break; }
     catch (e) { if (k > 8) throw e; await sleep(300); }
   }
-  console.log(await run('stats()'));
+  if (!process.argv.includes('--song')) console.log(await run('stats()')); // a single-song export skips the statistics
   const w = process.argv.indexOf('--wav');
   if (w > 0) {
     const dir = process.argv[w + 1]; fs.mkdirSync(dir, { recursive: true });
-    for (let m = 0; m < 5; m++) { const f = path.join(dir, 'song' + m + '.wav'); fs.writeFileSync(f, Buffer.from(await run('wav(' + m + ')'), 'base64')); console.log('wrote', f); }
+    const only = process.argv.indexOf('--song') > 0 ? +process.argv[process.argv.indexOf('--song') + 1] : -1;
+    for (let m = 0; m < 5; m++) {
+      if (only >= 0 && m !== only) continue; const f = path.join(dir, 'song' + m + '.wav'); fs.writeFileSync(f, Buffer.from(await run('wav(' + m + ')'), 'base64')); console.log('wrote', f); }
   }
 })().catch(e => console.error(e.message)).finally(() => { chrome.kill(); });
