@@ -93,7 +93,7 @@ function newRun() {
   };
   R.P = {
     x: W / 2, y: H / 2, vx: 0, vy: 0, kx: 0, ky: 0, pol: 0, ups: [], hp: 1, sh: 0, charge: 0, inv: 0, fireCd: 0, vq: [],
-    novaCd: 0, lockT: 0, ang: -Math.PI / 2, face: -Math.PI / 2, still: 0, drones: [], misCd: 1, mineCd: 0, teslaCd: 0, orbCd: 2, bladeCd: 0, heat: 0, railN: 0, hist: [], fl: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, shards: 0, refl: 0, vampN: 0, ofl: 0, blinkCd: 0, fcN: 0, rageT: 0, cs: 0, dashCd: 0, fireHeld: 0, shockCd: 0, seqPol: -1, seqN: 0, chain: 0, preview: null,
+    novaCd: 0, lockT: 0, ang: -Math.PI / 2, face: -Math.PI / 2, still: 0, drones: [], misCd: 1, mineCd: 0, teslaCd: 0, orbCd: 2, bladeCd: 0, heat: 0, railN: 0, hist: [], fl: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, shards: 0, refl: 0, vampN: 0, ofl: 0, aimT: 0, lockOn: null, blinkCd: 0, fcN: 0, rageT: 0, cs: 0, dashCd: 0, fireHeld: 0, shockCd: 0, seqPol: -1, seqN: 0, chain: 0, preview: null,
     stats: null, rateBuff: 0, hit: false, firing: false, dn: 0
   };
   const P = R.P;

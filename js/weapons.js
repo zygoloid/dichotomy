@@ -44,7 +44,27 @@ function spawnShot(x, y, ang, o) {
   return sh;
 }
 
+// Auto-aim: if an enemy lies within 25 degrees of where the pilot is pointing (enough that
+// eight-way aiming can reach anything), fire at it instead, leading it a little. Enemies the
+// shot can actually hurt are preferred; among those, the nearest wins.
+function autoAim(ang) {
+  const P = R.P, s = P.stats, cone = (25 + 10 * (s.autoaim - 1)) * Math.PI / 180;
+  let best = null, bs = 1e9;
+  for (const e of R.enemies) {
+    if (e.dead || e.spawn > 0) continue;
+    const d = hyp(e.x - P.x, e.y - P.y);
+    if (Math.abs(angDiff(ang, Math.atan2(e.y - P.y, e.x - P.x))) > cone) continue;
+    const score = d + (polMul(P.pol, e) <= 0 ? 5000 : 0);
+    if (score < bs) { bs = score; best = e; }
+  }
+  P.lockOn = best; P.aimT = best ? .25 : 0;
+  if (!best) return ang;
+  const t = Math.min(.5, hyp(best.x - P.x, best.y - P.y) / s.spd) * (s.beam ? 0 : 1);
+  return Math.atan2(best.y + best.vy * t - P.y, best.x + best.vx * t - P.x);
+}
+
 function fireVolley(ang) {
+  if (R.P.stats.autoaim) ang = autoAim(ang);
   // charged shot: whatever built up while the trigger was released goes into this volley
   const P = R.P, s = P.stats, cs = s.chargeshot ? P.cs : 0, d = shotDmg() * (1 + 3 * s.chargeshot * cs), rad = Math.PI / 180;
   P.cs = 0; if (P.fcN > 0) P.fcN--;
@@ -91,7 +111,7 @@ function updateFire(dt) {
   }
   P.fireCd -= dt; P.bladeCd -= dt;
   P.heat = clamp(P.heat + (P.firing ? dt / 2 : -dt * 2), 0, 1);
-  P.shockCd -= dt;
+  P.shockCd -= dt; P.aimT -= dt;
   if (P.firing) P.fireHeld += dt;
   else {
     // aftershock: letting go after sustained fire throws out a ring

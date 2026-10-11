@@ -11,7 +11,7 @@ function baseStats() {
     pierceGrow: 0, kinetic: 0, turret: 0, berserk: 0, oppMul: 2, sameMul: 0, // same-colour hits are deflected unless an upgrade says otherwise
     beam: 0, drone: 0, missile: 0, mine: 0, tesla: 0,
     bwave: 0, baegis: 0, bfocus: 0, bpolar: 0, deadman: 0, overflow: 0, dynamo: 0, flux: 0, vacuum: 0, trickle: 0, corona: 0,
-    fblink: 0, fcrit: 0, rage: 0, aftershock: 0, chargeshot: 0, dash: 0, crescent: 0, phase: 0, refract: 0, slip: 0, arcweb: 0, detonate: 0, repel: 0,
+    autoaim: 0, fblink: 0, fcrit: 0, rage: 0, aftershock: 0, chargeshot: 0, dash: 0, crescent: 0, phase: 0, refract: 0, slip: 0, arcweb: 0, detonate: 0, repel: 0,
     spinup: 0, blade: 0, rail: 0, orb: 0, flak: 0, convert: 0, ghost: 0, flail: 0, swarm: 0, map: 0,
     // pilot
     maxHp: 4, move: 300, hitR: 5, absorbR: 26, magnet: 90, luck: 0, chargeMax: 100, rings: 1, gain: 1, burstN: 1,
@@ -84,6 +84,7 @@ U('overflow', 2, 'P2,4,8,4,8,9,2,9;A5,5,5,.8;L3,2.5,3,1.5;L7,2.5,7,1.5', s => { 
 U('corona', 2, 'C5,5,2;R5,5,4,0,50;R5,5,4,90,140;R5,5,4,180,230;R5,5,4,270,320', s => { s.corona += 1; }, 'absorbed', 900);
 U('bpolar', 2, 'C5,5,4;D3.5,5,1;C6.5,5,1', s => { s.bpolar += 1; }, 'absorbed', 1200);
 // --- triggered actions (on flip, on hit, on ceasing fire, on a double-tap) and shot behaviours
+U('autoaim', 0, 'C6.5,3.5,2.2;L6.5,.6,6.5,1.6;L6.5,5.4,6.5,6.4;L3.6,3.5,4.6,3.5;L8.4,3.5,9.4,3.5;A1,9,4.6,5.4', s => { s.autoaim += 1; });
 U('dash', 0, 'L1,2,4,5,1,8;L4,2,7,5,4,8;D8.6,5,1.1', s => { s.dash += 1; });
 U('repel', 0, 'C5,5,2;A2.4,2.4,.6,.6;A7.6,2.4,9.4,.6;A2.4,7.6,.6,9.4;A7.6,7.6,9.4,9.4', s => { s.repel += 1; }, 'grazes', 300);
 U('slip', 0, 'C5,5,2.5;L1,5,2.5,5;A7.5,5,9.8,5;L3.6,5,4.3,5;L5.7,5,6.4,5', s => { s.slip += 1; }, 'kills', 1000);

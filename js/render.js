@@ -308,6 +308,12 @@ function drawPlayer(c) {
     c.beginPath(); c.arc(P.x, P.y, s.absorbR + 5, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, chgFrac())); c.stroke();
   }
   if (P.lockT > 0) { c.strokeStyle = BAD; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 19, 0, TAU * P.lockT / s.flipLock); c.stroke(); }
+  if (P.aimT > 0 && P.lockOn && !P.lockOn.dead) { // auto-aim: corner brackets on the target
+    const e = P.lockOn, r = e.r + 9;
+    c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.beginPath();
+    for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { c.moveTo(e.x + sx * r, e.y + sy * (r - 7)); c.lineTo(e.x + sx * r, e.y + sy * r); c.lineTo(e.x + sx * (r - 7), e.y + sy * r); }
+    c.stroke();
+  }
   if (P.rageT > 0) { c.strokeStyle = rgba(BAD, .5 + .3 * Math.sin(G.t * 20)); c.lineWidth = 2; polyPath(c, P.x, P.y, 22, 3, G.t * 5); c.stroke(); }
   if (P.fcN > 0) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 17, 0, TAU * P.fcN / (3 * s.fcrit)); c.stroke(); }
   if (s.chargeshot && P.cs > .05) { // the charge gathering at the nose
