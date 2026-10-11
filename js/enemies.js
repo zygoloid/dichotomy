@@ -24,8 +24,8 @@ function efan(e, n, arc, a, spd, pol, r, o) { for (let i = 0; i < n; i++) eb(e.x
 const NAV = 40, NC = Math.ceil((BX1 - BX0) / NAV), NQ = Math.ceil((BY1 - BY0) / NAV);
 const navCell = (x, y) => clamp(Math.floor((x - BX0) / NAV), 0, NC - 1) + clamp(Math.floor((y - BY0) / NAV), 0, NQ - 1) * NC;
 function updateNav() {
-  const room = R.room;
-  if (!room.obs.length) { R.nav = null; return; }
+  const room = R.room, holes = room.holes.length === 2 ? room.holes : null;
+  if (!room.obs.length && !holes) { R.nav = null; return; }
   if (R.nav && R.time - R.navT < .25) return;
   R.navT = R.time;
   if (!room.navB) { // cells too close to a fixed block to stand in
@@ -36,31 +36,84 @@ function updateNav() {
     }
   }
   const b = room.navB, d = R.nav || (R.nav = new Int16Array(NC * NQ)), queue = [navCell(R.P.x, R.P.y)];
+  // Wormholes: walking across a ring means going through it, so the discs are no-go cells.
+  // The cells around each ring are its mouth, and the two mouths are joined as a shortcut.
+  const hb = R.navHB || (R.navHB = new Uint8Array(NC * NQ)), mouth = R.navMouth = holes ? [[], []] : null, jumped = [false, false];
+  hb.fill(0);
+  if (holes) for (let k = 0; k < NC * NQ; k++) {
+    const x = BX0 + (k % NC + .5) * NAV, y = BY0 + (((k / NC) | 0) + .5) * NAV;
+    for (let i = 0; i < 2; i++) { const dd = hyp(x - holes[i].x, y - holes[i].y); if (dd < holes[i].r - 6) hb[k] = 1; else if (dd < holes[i].r + 36 && !b[k]) { hb[k] = 2 + i; mouth[i].push(k); } }
+  }
+  R.navMouthD = [1e9, 1e9];
   d.fill(-1); d[queue[0]] = 0;
+  if (b[queue[0]] || hb[queue[0]] === 1) { // the pilot is hugging a wall: start from the nearest open cells instead
+    const pc = queue[0] % NC, pq = (queue[0] / NC) | 0;
+    for (let rad = 1; rad <= 3 && queue.length === 1; rad++) for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) {
+      const nc = pc + dx, nq = pq + dy, nk = nc + nq * NC;
+      if (nc < 0 || nq < 0 || nc >= NC || nq >= NQ || b[nk] || hb[nk] === 1 || d[nk] >= 0) continue;
+      d[nk] = rad; queue.push(nk);
+    }
+  }
   for (let i = 0; i < queue.length; i++) {
-    const k = queue[i], c = k % NC, q = (k / NC) | 0;
+    const k = queue[i], c = k % NC, q = (k / NC) | 0, m = hb[k] - 2;
+    if (m >= 0) {
+      R.navMouthD[m] = Math.min(R.navMouthD[m], d[k]);
+      if (!jumped[m]) { jumped[m] = true; for (const nk of mouth[1 - m]) if (d[nk] < 0) { d[nk] = d[k] + 4; queue.push(nk); } }
+    }
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nc = c + dx, nq = q + dy, nk = nc + nq * NC;
-      if (nc < 0 || nq < 0 || nc >= NC || nq >= NQ || d[nk] >= 0 || b[nk]) continue;
+      if (nc < 0 || nq < 0 || nc >= NC || nq >= NQ || d[nk] >= 0 || b[nk] || hb[nk] === 1) continue;
       d[nk] = d[k] + 1; queue.push(nk);
     }
   }
 }
+// does a fixed block, or a wormhole ring, lie on the straight line between two points?
+function wallBetween(x0, y0, x1, y1) {
+  for (const h of R.room.holes) if (segDist(h.x, h.y, x0, y0, x1, y1) < h.r) return true;
+  const n = Math.ceil(hyp(x1 - x0, y1 - y0) / 6);
+  for (let i = 1; i < n; i++) {
+    const x = lerp(x0, x1, i / n), y = lerp(y0, y1, i / n);
+    for (const o of R.room.obs) if (!o.mv && x > o.x && x < o.x + o.w && y > o.y && y < o.y + o.h) return true;
+  }
+  return false;
+}
 // where a chaser should head: straight at the pilot if nothing is in the way, else the next cell along
 const _np = { x: 0, y: 0 };
 function navPoint(e) {
-  const P = R.P, b = R.room.navB;
+  const P = R.P, b = R.room.navB, hb = R.navHB;
   if (!R.nav || !b) return P;
   const n = Math.ceil(hyp(P.x - e.x, P.y - e.y) / 28);
   let clear = true;
-  for (let i = 1; i < n && clear; i++) if (b[navCell(lerp(e.x, P.x, i / n), lerp(e.y, P.y, i / n))]) clear = false;
+  for (let i = 1; i < n && clear; i++) { const k = navCell(lerp(e.x, P.x, i / n), lerp(e.y, P.y, i / n)); if (b[k] || hb[k] === 1) clear = false; }
   if (clear) return P;
-  const k = navCell(e.x, e.y), c = k % NC, q = (k / NC) | 0;
+  const k = navCell(e.x, e.y), c = k % NC, q = (k / NC) | 0, m = hb[k] - 2;
   let best = -1, bd = R.nav[k] < 0 ? 1e9 : R.nav[k];
+  if (m >= 0 && R.navMouthD[1 - m] + 4 <= bd && R.navMouthD[1 - m] < R.navMouthD[m]) return R.room.holes[m]; // the far end is nearer the pilot: go in
+  if (hb[k] === 1) { // already at a ring's edge: finish going in if that is the way, rather than dithering on the brink
+    const hs = R.room.holes, i = hyp(e.x - hs[0].x, e.y - hs[0].y) < hyp(e.x - hs[1].x, e.y - hs[1].y) ? 0 : 1;
+    if (R.navMouthD[1 - i] < R.navMouthD[i]) return hs[i];
+  }
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const nc = c + dx, nq = q + dy, nk = nc + nq * NC;
     if (nc < 0 || nq < 0 || nc >= NC || nq >= NQ || R.nav[nk] < 0 || R.nav[nk] >= bd) continue;
     bd = R.nav[nk]; best = nk;
+  }
+  if (best < 0 && R.nav[k] < 0) { // wedged somewhere off the map of open cells: make for the nearest one
+    let bs = 1e9;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      const nc = c + dx, nq = q + dy, nk = nc + nq * NC;
+      if (nc < 0 || nq < 0 || nc >= NC || nq >= NQ || R.nav[nk] < 0) continue;
+      if (wallBetween(e.x, e.y, BX0 + (nc + .5) * NAV, BY0 + (nq + .5) * NAV)) continue; // not one on the far side of a wall
+      const sc = Math.abs(dx) + Math.abs(dy) + R.nav[nk] * .01;
+      if (sc < bs) { bs = sc; best = nk; }
+    }
+  }
+  if (best < 0 && R.nav[k] < 0) for (const h of R.room.holes) { // squeezed between a ring and a wall: slide round the ring
+    const dx = e.x - h.x, dy = e.y - h.y, d = hyp(dx, dy);
+    if (d > h.r + 70 || d < 1) continue;
+    const sgn = (P.x - e.x) * -dy + (P.y - e.y) * dx >= 0 ? 1 : -1;
+    _np.x = e.x + (-dy / d * sgn * 50 + dx / d * 12); _np.y = e.y + (dx / d * sgn * 50 + dy / d * 12);
+    return _np;
   }
   if (best < 0) return P;
   _np.x = BX0 + (best % NC + .5) * NAV; _np.y = BY0 + (((best / NC) | 0) + .5) * NAV;
@@ -540,7 +593,21 @@ function updateEnemies(dt) {
     e.x = clamp(e.x, !e.boss && inWrap(e.y, -1) ? -99 : BX0 + e.r, !e.boss && inWrap(e.y, 1) ? W + 99 : BX1 - e.r);
     e.y = clamp(e.y, BY0 + e.r, BY1 - e.r);
     if (!e.boss) teleport(e);
-    if (!e.boss) for (const o of R.room.obs) { const h = circRect(e.x, e.y, e.r, o); if (h) { e.x += h.x; e.y += h.y; } }
+    // Last resort for anything wedged where the pathfinder has no map (a sliver between a wall
+    // and a wormhole, say): after a moment it drifts straight to the nearest open floor,
+    // through whatever is in the way.
+    e.offT = R.nav && !e.boss && R.nav[navCell(e.x, e.y)] < 0 ? (e.offT || 0) + d : 0;
+    if (e.offT > 1.2) {
+      const k = navCell(e.x, e.y), c = k % NC, q = (k / NC) | 0;
+      let bx = 0, by = 0, bs = 1e9;
+      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+        const nc = c + dx, nq = q + dy;
+        if (nc < 0 || nq < 0 || nc >= NC || nq >= NQ || R.nav[nc + nq * NC] < 0) continue;
+        const x = BX0 + (nc + .5) * NAV, y = BY0 + (nq + .5) * NAV, sc = hyp(x - e.x, y - e.y) + (wallBetween(e.x, e.y, x, y) ? 400 : 0);
+        if (sc < bs) { bs = sc; bx = x; by = y; }
+      }
+      if (bs < 1e9) { const dd = hyp(bx - e.x, by - e.y) || 1; e.x += (bx - e.x) / dd * 170 * d; e.y += (by - e.y) / dd * 170 * d; }
+    } else if (!e.boss) for (const o of R.room.obs) { const h = circRect(e.x, e.y, e.r, o); if (h) { e.x += h.x; e.y += h.y; } }
     if (hyp(P.x - e.x, P.y - e.y) < e.r * .85 + P.stats.hitR) hurtPlayer();
     else if (R.room.wraps.length) { const im = holeImage(e.x, e.y); if (im && hyp(P.x - im.x, P.y - im.y) < e.r * .85 + P.stats.hitR) hurtPlayer(); }
     if (e.beams) for (const b of e.beams) {

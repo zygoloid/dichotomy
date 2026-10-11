@@ -8,9 +8,9 @@ const STAGES = [
   { pc: ['#ffe66b', '#4a7dff'], bg: '#020308', line: '#231a55', wall: '#8b5cff', bpm: 124, style: 2, boss: ['sing'], mus: 2, depth: 2, haz: { well: 1, wellN: 2 } },
   { pc: ['#bfe9ff', '#ff5a36'], bg: '#0c0404', line: '#5a1414', wall: '#ff2d55', bpm: 138, style: 3, boss: ['metro'], mus: 3, depth: 3, haz: { flip: 1 } },
   { pc: ['#7dffd0', '#ff4ae0'], bg: '#000000', line: '#2c2c3a', wall: '#ffffff', bpm: 140, style: 4, boss: ['eclipse'], mus: 4, depth: 4, haz: { well: .4, gate: .3 } },
-  // alternates for the first three depths
+  // alternates for the first three depths (the second is where teleporters are common)
   { pc: ['#7df9ff', '#ff7a3d'], bg: '#020a0c', line: '#0f4d55', wall: '#22d3c5', bpm: 130, style: 5, boss: ['tide'], mus: 3, depth: 0, haz: { flow: .75 } },
-  { pc: ['#fff27d', '#ff4d6d'], bg: '#0b0508', line: '#4d1832', wall: '#e85d9a', bpm: 138, style: 6, boss: ['kalei'], mus: 4, depth: 1, haz: { bounce: 1 } },
+  { pc: ['#fff27d', '#ff4d6d'], bg: '#0b0508', line: '#4d1832', wall: '#e85d9a', bpm: 138, style: 6, boss: ['kalei'], mus: 4, depth: 1, haz: { bounce: 1, tele: 1 } },
   { pc: ['#ffd0a1', '#a66bff'], bg: '#0a0502', line: '#4d2408', wall: '#ff7b1c', bpm: 126, style: 7, boss: ['binary'], mus: 0, depth: 2, haz: { field: .75 } },
   // the last floor: bullets ricochet and every room draws one hazard from the whole set
   { pc: ['#fff6d6', '#ff2e63'], bg: '#070500', line: '#4a3a08', wall: '#ffd23f', bpm: 142, style: 8, boss: ['crown'], mus: 3, depth: 5, haz: { bounce: 1, pick: 1 } }
@@ -66,90 +66,197 @@ function genWaves(stage, depth, chasersOnly) {
 //   burst                    only a burst breaks it      crate  may drop a pickup when broken
 // Alongside them: gates (solid to the other colour), switches (shoot to swap every gate's colour),
 // saws (travelling hazards), holes (wormhole pairs) and wraps (linked stretches of the side walls).
-const LAYOUTS = [['open', 2], ['pillars', 2], ['block', 1], ['bars', 2], ['scatter', 3],
+const LAYOUTS = [['open', 2], ['pillars', 3], ['block', 1], ['bars', 2], ['sym', 3],
   ['maze', 3, 'rm:maze'], ['movers', 3, 'rm:movers'], ['danger', 3, 'rm:danger'], ['polar', 3, 'rm:polar'], ['vault', 3, 'rm:vault']];
 
+// Furniture is never scattered at random: every arrangement is either a pattern (mirrored,
+// ringed, in rows) or there for a reason (a lane to run, cover to hold, something to reach).
+const CX = W / 2, CY = H / 2;
+// a rectangle of size w x h centred at (x, y) relative to the room's centre
+const rc = (x, y, w, h, props) => Object.assign({ x: CX + x - w / 2, y: CY + y - h / 2, w, h }, props);
+// mirror centre-relative specs [x, y, w, h]: 'hv' four ways, 'h' left-right, 'rot' by a half turn
+function mirrored(specs, mode, props) {
+  const out = [];
+  const add = (x, y, w, h) => { if (!out.some(o => Math.abs(o.x - (CX + x - w / 2)) < 1 && Math.abs(o.y - (CY + y - h / 2)) < 1)) out.push(rc(x, y, w, h, typeof props === 'function' ? props(out.length) : props)); };
+  for (const [x, y, w, h] of specs) {
+    add(x, y, w, h);
+    if (mode === 'rot') add(-x, -y, w, h);
+    if (mode === 'h' || mode === 'hv') add(-x, y, w, h);
+    if (mode === 'hv') { add(x, -y, w, h); add(-x, -y, w, h); }
+  }
+  return out;
+}
+const ringOf = (n, rx, ry, size, props) => Array.from({ length: n }, (_, i) => rc(Math.cos(i * TAU / n + TAU / (2 * n)) * rx, Math.sin(i * TAU / n + TAU / (2 * n)) * ry, size, size, props));
+const PATTERNS = {
+  pillars: [
+    () => mirrored([[270, 130, 60, 60]], 'hv'),                         // four posts
+    () => ringOf(6, 300, 170, 50),                                      // a ring of six
+    () => mirrored([[110, 150, 44, 44], [320, 150, 44, 44]], 'hv'),     // two colonnades
+    () => mirrored([[190, 95, 50, 50], [380, 190, 50, 50]], 'hv')       // an X
+  ],
+  block: [
+    () => [rc(0, 0, 160, 100)],
+    () => [rc(0, 0, 120, 80)].concat(mirrored([[380, 190, 50, 50]], 'hv')),
+    () => mirrored([[0, 0, 90, 90], [200, 0, 40, 40]], 'h')
+  ],
+  bars: [
+    () => mirrored([[-230, -120, 220, 36]], 'rot'),                     // two offset bars
+    () => mirrored([[250, 150, 200, 28]], 'hv'),                        // a broken ring
+    () => mirrored([[-150, -190, 180, 26], [150, -130, 26, 150]], 'rot'), // a pinwheel
+    () => mirrored([[330, 0, 28, 200], [0, 200, 200, 28]], 'hv')        // a box open at the corners
+  ],
+  sym: [
+    () => { // one or two blocks in a quadrant, mirrored four ways
+      const specs = [];
+      for (let g = 0, n = randi(1, 2); specs.length < n && g < 30; g++) {
+        const s = [rand(130, 430), rand(90, 210), rand(50, 110), rand(40, 90)];
+        if (!specs.some(q => Math.abs(q[0] - s[0]) < (q[2] + s[2]) / 2 + 40 && Math.abs(q[1] - s[1]) < (q[3] + s[3]) / 2 + 40)) specs.push(s);
+      }
+      return mirrored(specs, 'hv');
+    },
+    () => [-2, -1, 1, 2].map(i => rc(i * 190, i * 95, 60, 60)),         // steps down a diagonal
+    () => mirrored([[400, 205, 130, 24], [453, 160, 24, 110]], 'hv'),   // brackets in the corners
+    () => mirrored([[rand(150, 250), rand(-200, -120), 70, 70], [rand(330, 430), rand(60, 160), 90, 50]], 'h')
+  ]
+};
+
 function genLayout(r) {
-  const kind = wpick(LAYOUTS.filter(l => !l[2] || META.un[l[2]]), l => l[1])[0], o = r.obs = [];
-  r.layout = kind; r.rich = !!LAYOUTS.find(l => l[0] === kind)[2];
-  // drop n rectangles clear of the door lanes and of each other; into is obs or gates
-  const scatter = (n, lo, hi, props, into) => {
-    for (let i = 0, g = 0; i < n && g < 90; g++) {
-      const w = rand(lo, hi), h = rand(lo, hi), x = rand(190, 1090 - w), y = rand(150, 570 - h);
-      if ((x < 720 && x + w > 560) || (y < 430 && y + h > 290)) continue;
-      if (o.concat(r.gates, r.noSpawn).some(q => x < q.x + q.w + 50 && x + w > q.x - 50 && y < q.y + q.h + 50 && y + h > q.y - 50)) continue;
-      (into || o).push(Object.assign({ x, y, w, h }, typeof props === 'function' ? props(i) : props)); i++;
-    }
-  };
-  if (kind === 'pillars') for (const [x, y] of [[340, 200], [880, 200], [340, 460], [880, 460]]) o.push({ x, y, w: 60, h: 60 });
-  else if (kind === 'block') o.push({ x: 560, y: 310, w: 160, h: 100 });
-  else if (kind === 'bars') o.push({ x: 300, y: 222, w: 220, h: 36 }, { x: 760, y: 462, w: 220, h: 36 });
-  else if (kind === 'scatter') { scatter(randi(3, 5), 50, 100); if (META.un['rm:vault'] && chance(.4)) scatter(2, 42, 46, { burst: true, crate: true }); }
+  const lay = wpick(LAYOUTS.filter(l => !l[2] || META.un[l[2]]), l => l[1]), kind = lay[0];
+  r.layout = kind; r.rich = !!lay[2]; r.obs = [];
+  // add blocks only where they do not crowd what is already there
+  const place = list => { for (const o of list) if (!r.obs.concat(r.gates, r.noSpawn).some(q => o.x < q.x + q.w + 16 && o.x + o.w > q.x - 16 && o.y < q.y + q.h + 16 && o.y + o.h > q.y - 16)) r.obs.push(o); };
+  const crates = specs => { if (META.un['rm:vault']) place(mirrored(specs, 'h', { burst: true, crate: true })); };
+  if (PATTERNS[kind]) { r.obs = pick(PATTERNS[kind])(); if (chance(.3)) crates([[150, 0, 44, 44]]); }
   else if (kind === 'maze') genMaze(r);
   else if (kind === 'movers') {
-    const hz = chance(.5), n = randi(2, 3);
-    for (let i = 0; i < n; i++) {
-      const per = rand(5, 8), ph = rand();
-      if (hz) { const y = [170, 345, 520][i] - 15; o.push({ x: 150, y, w: 150, h: 30, mv: { ax: 150, ay: y, bx: 980, by: y, per, ph } }); }
-      else { const x = [300, 625, 950][i] - 15; o.push({ x, y: 110, w: 30, h: 130, mv: { ax: x, ay: 110, bx: x, by: 480, per, ph } }); }
+    // sliders run in parallel lanes, with fixed posts between the lanes to dodge behind
+    const hz = chance(.5), n = randi(2, 3), lanes = n === 2 ? [-1, 1] : [-1, 0, 1];
+    for (const l of lanes) {
+      const per = rand(5, 8), ph = l === 0 ? .5 : (l + 1) / 4;
+      if (hz) { const y = CY + l * (n === 2 ? 110 : 190) - 15; r.obs.push({ x: 150, y, w: 150, h: 30, mv: { ax: 150, ay: y, bx: 980, by: y, per, ph } }); }
+      else { const x = CX + l * (n === 2 ? 170 : 330) - 15; r.obs.push({ x, y: 110, w: 30, h: 130, mv: { ax: x, ay: 110, bx: x, by: 480, per, ph } }); }
     }
-    scatter(2, 50, 70);
-  } else if (kind === 'danger') {
-    scatter(randi(3, 4), 46, 60, { hot: true });
-    for (let i = 0, n = randi(1, 2); i < n; i++) r.saws.push(chance(.5)
-      ? { ax: 160, ay: rand(140, 580), bx: 1120, by: rand(140, 580), per: rand(5, 8), ph: rand(), r: 20, x: -99, y: -99 }
-      : { ax: rand(160, 1120), ay: 120, bx: rand(160, 1120), by: 600, per: rand(4, 6), ph: rand(), r: 20, x: -99, y: -99 });
-  } else if (kind === 'polar') {
-    const i0 = randi(0, 1);
-    scatter(randi(4, 6), 64, 90, i => ({ pol: (i + i0) & 1 }), r.gates);
-    r.switches.push({ x: W / 2, y: H / 2, cd: 0 });
-  } else if (kind === 'vault') { genVault(r); scatter(2, 50, 80); scatter(randi(1, 2), 42, 46, { burst: true, crate: true }); }
+    place(hz ? (n === 2 ? mirrored([[300, 0, 46, 46]], 'h') : mirrored([[300, 95, 46, 46]], 'hv'))
+             : (n === 2 ? mirrored([[0, 140, 46, 46]], 'hv') : mirrored([[165, 130, 46, 46]], 'hv')));
+  } else if (kind === 'danger') genDanger(r);
+  else if (kind === 'polar') genPolar(r);
+  else if (kind === 'vault') {
+    genVault(r);
+    place(mirrored([[270, 130, 60, 60]], 'hv')); // posts everywhere but the vault's own corner
+    crates([[150, 0, 44, 44]]);
+  }
 }
 
-// A maze: a spanning tree over an 8x5 grid of cells, with a few extra walls knocked out so it loops.
+// Spikes and saws, arranged so the saws patrol the lanes the spikes leave open.
+function genDanger(r) {
+  const hot = { hot: true }, saw = (ax, ay, bx, by, per, ph) => r.saws.push({ ax: CX + ax, ay: CY + ay, bx: CX + bx, by: CY + by, per, ph, r: 20, x: -99, y: -99 });
+  const k = randi(0, 2);
+  if (k === 0) { r.obs = mirrored([[120, 105, 50, 50], [360, 105, 50, 50]], 'hv', hot); saw(-440, 0, 440, 0, 7, 0); }        // a gauntlet with a saw down the middle
+  else if (k === 1) { r.obs = mirrored([[250, 130, 56, 56]], 'hv', hot); saw(-440, 0, 440, 0, 7, 0); saw(0, -200, 0, 200, 4.5, .25); } // four posts, saws on the cross between them
+  else { r.obs = ringOf(6, 260, 150, 50, hot); saw(-430, -200, -430, 200, 5, 0); saw(430, 200, 430, -200, 5, 0); }           // a ring of spikes flanked by two saws
+}
+
+// Coloured walls with a purpose. A fort: four walls round the middle, open at the corners, that
+// shield whoever is inside from one colour on two sides, with the switch that swaps the colours
+// in the centre. Or treasure cells: two corner chambers closed by walls of different colours.
+function genPolar(r) {
+  const a = randi(0, 1), gate = (x, y, w, h, pol) => r.gates.push(rc(x, y, w, h, { pol }));
+  r.switches.push({ x: CX, y: CY, cd: 0 });
+  if (chance(.5)) {
+    gate(0, -120, 260, 14, a); gate(0, 120, 260, 14, a); gate(-170, 0, 14, 180, a ^ 1); gate(170, 0, 14, 180, a ^ 1);
+    r.obs = mirrored([[400, 200, 50, 50]], 'hv');
+  } else {
+    const top = chance(.5);
+    for (const left of [true, false]) {
+      const ch = chamber(r, left, left ? top : !top), pol = left ? a : a ^ 1;
+      r.gates.push(Object.assign(ch.door, { pol }));
+      for (let i = 0, n = randi(3, 4); i < n; i++) r.pickups.push({ x: ch.x + ch.w / 2 + rand(-40, 40), y: ch.y + ch.h / 2 + rand(-26, 26), kind: 'shard', t: 0 });
+      if (chance(.35)) r.pickups.push({ x: ch.x + ch.w / 2, y: ch.y + ch.h / 2, kind: chance(.5) ? 'cell' : 'heart', t: 0 });
+    }
+    gate(-150, 0, 56, 56, a); gate(150, 0, 56, 56, a ^ 1); // a coloured post either side of the switch
+  }
+}
+
+// Mazes. Plain: a spanning tree over an 8x5 grid with a few extra walls knocked out so it loops.
+// Polar: the same, but a share of the walls are coloured gates, with a switch in the middle.
+// Split: a coarser maze cut in two by an unbroken wall, with one end of a wormhole in a dead
+// end on each side, so the wormhole is the only way across.
 function genMaze(r) {
-  const C = 8, Q = 5, cw = (BX1 - BX0) / C, ch = (BY1 - BY0) / Q, T = 12, V = [], Hz = [], seen = new Set();
-  for (let c = 0; c < C; c++) { V.push(Array(Q).fill(true)); Hz.push(Array(Q).fill(true)); } // V[c][q]: wall right of the cell, Hz[c][q]: wall below it
+  const split = META.un['tele:hole'] && chance(.4), polar = !split && META.un['rm:polar'] && chance(.35);
+  const C = split ? 6 : 8, Q = split ? 4 : 5, cw = (BX1 - BX0) / C, ch = (BY1 - BY0) / Q, T = 12, cs = split ? pick([1, 3]) : -1;
+  const V = [], Hz = [], seen = new Set(); // V[c][q]: wall right of the cell, Hz[c][q]: wall below it
+  for (let c = 0; c < C; c++) { V.push(Array(Q).fill(true)); Hz.push(Array(Q).fill(true)); }
   const carve = (c, q) => {
     seen.add(c + q * C);
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(() => Math.random() - .5)) {
       const nc = c + dx, nq = q + dy;
-      if (nc < 0 || nq < 0 || nc >= C || nq >= Q || seen.has(nc + nq * C)) continue;
+      if (nc < 0 || nq < 0 || nc >= C || nq >= Q || seen.has(nc + nq * C) || (dx && Math.min(c, nc) === cs)) continue;
       if (dx) V[Math.min(c, nc)][q] = false; else Hz[c][Math.min(q, nq)] = false;
       carve(nc, nq);
     }
   };
-  carve(randi(0, C - 1), randi(0, Q - 1));
-  V[3][0] = V[3][Q - 1] = false; // the top and bottom doors sit on a cell boundary: keep it open
+  carve(0, randi(0, Q - 1));
+  if (split) carve(C - 1, randi(0, Q - 1));
+  for (let c = 0; c < C; c++) for (let q = 0; q < Q; q++) { // knock a few more out, but never the dividing wall
+    if (c !== cs && V[c][q] && chance(.15)) V[c][q] = false;
+    if (Hz[c][q] && chance(.15)) Hz[c][q] = false;
+  }
+  V[C / 2 - 1][0] = V[C / 2 - 1][Q - 1] = false;              // the top and bottom doors sit on a cell boundary
+  if (Q % 2 === 0) Hz[0][Q / 2 - 1] = Hz[C - 1][Q / 2 - 1] = false; // and so do the side doors when there is an even number of rows
   for (let c = 0; c < C; c++) for (let q = 0; q < Q; q++) {
-    if (c < C - 1 && V[c][q] && !chance(.15)) r.obs.push({ x: BX0 + (c + 1) * cw - T / 2, y: BY0 + q * ch, w: T, h: ch });
-    if (q < Q - 1 && Hz[c][q] && !chance(.15)) r.obs.push({ x: BX0 + c * cw, y: BY0 + (q + 1) * ch - T / 2, w: cw, h: T });
+    const wall = (o, n) => { if (polar && chance(.4)) r.gates.push(Object.assign(o, { pol: n & 1 })); else r.obs.push(o); };
+    if (c < C - 1 && V[c][q]) wall({ x: BX0 + (c + 1) * cw - T / 2, y: BY0 + q * ch, w: T, h: ch }, c + q);
+    if (q < Q - 1 && Hz[c][q]) wall({ x: BX0 + c * cw, y: BY0 + (q + 1) * ch - T / 2, w: cw, h: T }, c + q + 1);
+  }
+  if (polar) r.switches.push({ x: BX0 + (C / 2 + .5) * cw, y: BY0 + (Q / 2) * ch, cd: 0 });
+  if (split) {
+    const open = (c, q) => (c > 0 && !V[c - 1][q]) + (c < C - 1 && !V[c][q]) + (q > 0 && !Hz[c][q - 1]) + (q < Q - 1 && !Hz[c][q]);
+    const atDoor = (c, q) => ((c === C / 2 - 1 || c === C / 2) && (q === 0 || q === Q - 1)) || ((c === 0 || c === C - 1) && (q === Q / 2 - 1 || q === Q / 2));
+    const best = (c0, c1) => { // the most enclosed cell on one side that is not a doorway
+      let b = null, bs = 9;
+      for (let c = c0; c <= c1; c++) for (let q = 0; q < Q; q++) { const s = open(c, q) + (atDoor(c, q) ? 5 : 0) + Math.random() * .5; if (s < bs) { bs = s; b = [c, q]; } }
+      return { x: BX0 + (b[0] + .5) * cw, y: BY0 + (b[1] + .5) * ch, r: 50 };
+    };
+    r.holes = [Object.assign(best(0, cs), { to: 1 }), Object.assign(best(cs + 1, C - 1), { to: 0 })];
   }
 }
 
-// A sealed chamber in a corner: three solid walls, a burst-only barrier, and loot that cannot
-// be reached (or magnetised out) until the barrier is gone.
-function genVault(r) {
-  const left = chance(.5), top = chance(.5), w = 170, h = 120, T = 12;
-  const x = left ? BX0 + 34 : BX1 - 34 - w, y = top ? BY0 + 34 : BY1 - 34 - h;
-  const door = { x: left ? x + w - T : x, y: y + T, w: T, h: h - 2 * T, burst: true };
-  r.obs.push({ x, y, w, h: T }, { x, y: y + h - T, w, h: T }, { x: left ? x : x + w - T, y, w: T, h }, door);
+// A sealed chamber in a corner: three solid walls and a door facing the middle of the room.
+// Returns its bounds and the door, which the caller makes a burst barrier or a coloured gate.
+function chamber(r, left, top) {
+  const w = 170, h = 120, T = 12, x = left ? BX0 + 34 : BX1 - 34 - w, y = top ? BY0 + 34 : BY1 - 34 - h;
+  r.obs.push({ x, y, w, h: T }, { x, y: y + h - T, w, h: T }, { x: left ? x : x + w - T, y, w: T, h });
   r.noSpawn.push({ x: x - 24, y: y - 24, w: w + 48, h: h + 48 });
-  const loot = kind => r.pickups.push({ x: x + w / 2 + rand(-40, 40), y: y + h / 2 + rand(-26, 26), kind, t: 0, lock: door });
+  return { x, y, w, h, door: { x: left ? x + w - T : x, y: y + T, w: T, h: h - 2 * T } };
+}
+// A vault: its door only gives way to a burst, and its loot cannot be reached (or magnetised
+// out) until it does.
+function genVault(r) {
+  const ch = chamber(r, chance(.5), chance(.5)), door = Object.assign(ch.door, { burst: true });
+  r.obs.push(door);
+  const loot = kind => r.pickups.push({ x: ch.x + ch.w / 2 + rand(-40, 40), y: ch.y + ch.h / 2 + rand(-26, 26), kind, t: 0, lock: door });
   for (let i = 0, n = randi(4, 6); i < n; i++) loot('shard');
   if (chance(.45)) loot('heart');
   if (chance(.4)) loot('cell');
 }
 
-// Teleporters laid over whatever else the room has.
+// Teleporters laid over whatever else the room has. They are a feature of one floor (haz.tele)
+// and a rare surprise anywhere else. Some wormholes drift up and down.
 function genTeleporters(r) {
-  if (META.un['tele:hole'] && chance(r.layout === 'maze' ? .5 : .25)) for (let g = 0; g < 40; g++) {
+  if (r.layout === 'maze') return; // a maze places its own, or none
+  const common = !!PAL.haz.tele;
+  if (META.un['tele:hole'] && chance(common ? .5 : .06)) for (let g = 0; g < 40; g++) {
     const a = { x: rand(180, 440), y: rand(160, 560), r: 56, to: 1 }, b = { x: rand(840, 1100), y: rand(160, 560), r: 56, to: 0 };
-    const bad = p => Math.abs(p.y - H / 2) < 110 && (p.x < 290 || p.x > 990) || r.obs.concat(r.gates, r.noSpawn).some(o => circRect(p.x, p.y, 92, o));
+    const hit = (x, y) => r.obs.concat(r.gates, r.noSpawn).some(o => circRect(x, y, 92, o));
+    const bad = p => Math.abs(p.y - H / 2) < 110 && (p.x < 290 || p.x > 990) || hit(p.x, p.y);
     if (bad(a) || bad(b)) continue;
+    for (const h of [a, b]) if (chance(.3)) { // a drifting ring, if its whole run is clear
+      const y0 = clamp(h.y - 140, 160, 560), y1 = clamp(h.y + 140, 160, 560);
+      if (![y0, (y0 + y1) / 2, y1].some(y => bad({ x: h.x, y }))) h.mv = { ax: h.x, ay: y0, bx: h.x, by: y1, per: rand(8, 11), ph: rand() };
+    }
     r.holes = [a, b]; break;
   }
-  if (META.un['tele:wrap'] && chance(.25)) {
+  if (META.un['tele:wrap'] && chance(common ? .45 : .06)) {
     // A link joins a stretch of the left wall (from l0) to a stretch of the right wall (from r0),
     // both h tall. Straight across at the top, the bottom or both; or diagonally, one or both ways.
     const top = BY0 + 50, bot = BY1 - 190, h = 140, k = randi(0, 4);
