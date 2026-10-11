@@ -6,6 +6,7 @@
 <script>const META = { vol: 1 };</script>
 <script src="../js/util.js"></script>
 <script src="../js/audio.js"></script>
+<script src="song_candidates.js"></script>
 <script>
 const BPM = [126, 132, 124, 138, 140];
 async function render(mus, plan, sr, raw) {
@@ -40,5 +41,7 @@ window.wav = async mus => {
   for (let i = 0; i < u.length; i += 8192) bin += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
   return btoa(bin);
 };
+// a candidate for song 0, rendered in its place
+window.wavCand = async key => { const keep = AU.MUS[0]; AU.MUS[0] = CAND[key]; try { return await wav(0); } finally { AU.MUS[0] = keep; } };
 window.ready = true;
 </script>

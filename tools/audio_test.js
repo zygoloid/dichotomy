@@ -2,6 +2,7 @@
 //   node tools/audio_test.js             print level statistics for every song and intensity
 //   node tools/audio_test.js --wav DIR   also write song0.wav .. song4.wav previews into DIR
 //   ... --wav DIR --song N               write only song N (each takes a minute or two)
+//   node tools/audio_test.js --cand DIR  write a preview of each song-0 candidate in song_candidates.js
 const { spawn } = require('child_process'), path = require('path'), os = require('os'), fs = require('fs');
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe', PORT = 9377;
 const page = 'file:///' + path.join(__dirname, 'audio_test.html').split(path.sep).join('/');
@@ -27,6 +28,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   for (let k = 0; ; k++) {
     try { await run('new Promise(r => { const t = setInterval(() => { if (window.ready) { clearInterval(t); r(1); } }, 100); })'); break; }
     catch (e) { if (k > 8) throw e; await sleep(300); }
+  }
+  const cd = process.argv.indexOf('--cand');
+  if (cd > 0) {
+    const dir = process.argv[cd + 1]; fs.mkdirSync(dir, { recursive: true });
+    for (const k of await run('Object.keys(CAND)')) { const f = path.join(dir, 'song0_' + k + '.wav'); fs.writeFileSync(f, Buffer.from(await run('wavCand(' + JSON.stringify(k) + ')'), 'base64')); console.log('wrote', f); }
+    return;
   }
   if (!process.argv.includes('--song')) console.log(await run('stats()')); // a single-song export skips the statistics
   const w = process.argv.indexOf('--wav');
