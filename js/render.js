@@ -10,6 +10,12 @@ function polFill(c, pol, flash, lw) {
   else { c.fillStyle = '#000'; c.fill(); c.fillStyle = rgba(col, .2); c.fill(); c.strokeStyle = col; c.lineWidth = (lw || 2) + 1.5; c.stroke(); }
 }
 
+// the heart used for health everywhere, centred at (x, y); k is the size of one icon-grid unit
+function heartPath(c, x, y, k) {
+  c.beginPath();
+  for (const [px, py] of [[5, 9], [1.5, 5], [3, 2], [5, 3.5], [7, 2], [8.5, 5]]) c.lineTo(x + (px - 5) * k, y + (py - 5.4) * k);
+  c.closePath();
+}
 function keycap(c, x, y, label, w) {
   w = w || 26;
   c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = 1.5; c.strokeRect(x - w / 2, y - 13, w, 26);
@@ -149,7 +155,7 @@ function drawTutorial(c) {
   const cell = (i, left, right, ok) => {
     const x = px + 62 + i * 160;
     left(x); icon(c, 'A1,5,9,5', x + 34, cy, 20, '#fff', 1.2); right(x + 68);
-    icon(c, ok ? 'L2,5.5,4.2,8,8.5,2.5' : MSTAT_ICON.kills, x + 98, cy, 16, ok ? GOOD : BAD, 1.6);
+    icon(c, ok ? 'L2,5.5,4.2,8,8.5,2.5' : 'L2,2,8,8;L8,2,2,8', x + 98, cy, 16, ok ? GOOD : BAD, 1.6);
     if (i < 3) { c.fillStyle = 'rgba(255,255,255,.3)'; c.fillRect(x + 122, py + 16, 1, ph - 32); }
   };
   const ship = x => { shipPath(c, R.ship.id, x, cy, 9, 0); polFill(c, 0, false, 1.5); };
@@ -288,7 +294,7 @@ function drawPed(c, p, near) {
   if (p.hpCost) icon(c, UP.scar.icon, p.x, p.y + 54, 22, HEART, 1.2);
   if (p.price) {
     const ok = P.shards >= p.price;
-    icon(c, UP.dmg.icon, p.x - 14, p.y + 52, 14, SHARD, 1.2); num(c, p.price, p.x - 2, p.y + 52, ok ? SHARD : BAD);
+    c.fillStyle = SHARD; polyPath(c, p.x - 14, p.y + 52, 7, 4, 0); c.fill(); num(c, p.price, p.x - 2, p.y + 52, ok ? SHARD : BAD);
   }
   if (!near) return;
   keycap(c, p.x, p.y + (p.price || p.hpCost ? 82 : 58), 'E');
@@ -688,7 +694,7 @@ function drawHUD(c) {
   const baseHp = P.preview ? computeStats(R.ship, P.ups).maxHp : s.maxHp;
   for (let i = 0; i < Math.max(s.maxHp, baseHp); i++) {
     const x = 30 + (i % 12) * 24, y = 24 + Math.floor(i / 12) * 22;
-    shipPath(c, R.ship.id, x, y, 9.5, -Math.PI / 2);
+    heartPath(c, x, y, 2.3);
     if (i >= s.maxHp || i >= baseHp) { if (Math.sin(G.t * 8) > 0) { c.strokeStyle = i >= s.maxHp ? BAD : GOOD; c.lineWidth = 2; c.stroke(); } continue; }
     if (i < P.hp) { c.fillStyle = HEART; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke(); } else { c.strokeStyle = rgba(HEART, .5); c.lineWidth = 1.5; c.stroke(); }
   }

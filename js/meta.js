@@ -15,10 +15,10 @@ function mMax(k, v) { if (v > mGet(k)) META.stats[k] = v; }
 
 // icons for the lifetime counters, shown beside locked items in the gallery
 const MSTAT_ICON = {
-  kills: 'L2,2,8,8;L8,2,2,8', absorbed: 'C5,5,3.5;A9.5,.5,6.5,3.5', flips: UP.contrast.icon, bursts: UP.burst.icon,
+  kills: 'P2.5,2.5,7.5,2.5,7.5,7.5,2.5,7.5;L1,9,9,1', absorbed: 'C5,5,3.5;A9.5,.5,6.5,3.5', flips: UP.contrast.icon, bursts: UP.burst.icon,
   grazes: UP.graze.icon, shards: UP.greed.icon, rooms: 'P1,1,9,1,9,9,1,9;L4,9,4,6,6,6,6,9', runs: 'P3,2,8,5,3,8',
   wins: 'P1,8,1,3,3.5,5.5,5,2,6.5,5.5,9,3,9,8', bosses: 'P2,2,8,2,9,6,5,9,1,6;D3.8,4.5,.8;D6.2,4.5,.8',
-  chain: 'D2,5,1.2;D5,5,1.2;D8,5,1.2', taken: 'P5,1,9,5,5,9,1,5', stage: 'L1,9,1,7,4,7,4,5,7,5,7,3,9,3',
+  chain: 'D2,5,1.2;D5,5,1.2;D8,5,1.2', taken: 'C5,3.6,2.4;R5,8.4,3.2,180,360;L1.8,8.4,8.2,8.4', stage: 'L1,9,1,7,4,7,4,5,7,5,7,3,9,3',
   elites: 'P5,.8,6.3,3.8,9.5,3.8,7,6,8,9.3,5,7.4,2,9.3,3,6,.5,3.8,3.7,3.8',
   lattice: 'P5,1,9,5,5,9,1,5;L3,3,7,7;L7,3,3,7', secrets: 'P1,1,9,1,9,9,1,9;L5,1,4,4,6,6,5,9', minis: 'P3,2.5,7,2.5,8.5,6,5,8.5,1.5,6;D4,5,.7;D6,5,.7',
   hits: UP.berserk.icon, nohit: UP.shield.icon, asc: 'P5,1,9,9,1,9'
@@ -59,7 +59,7 @@ UL('ship:star', 'ship', 'wins', 1);
 UL('shop', 'room', 'shards', 40, 'P2,4,8,4,7,9,3,9;R5,4,2,180,360');
 UL('ped3', 'room', 'rooms', 20, 'D2,6,1;D5,6,1;D8,6,1;L1,8,9,8');
 UL('challenge', 'room', 'bosses', 2, 'L2,2,8,8;L8,2,2,8;C5,5,4.5');
-UL('treasure2', 'room', 'taken', 40, 'P5,1,9,5,5,9,1,5;P5,3,7,5,5,7,3,5');
+UL('treasure2', 'room', 'taken', 40, 'C3,4,1.7;L1.3,7.5,4.7,7.5;C7,4,1.7;L5.3,7.5,8.7,7.5');
 UL('startped', 'room', 'runs', 6, 'P3,2,8,5,3,8;D2,8,1');
 UL('stage4', 'stage', 'wins', 1, 'L1,9,1,7,4,7,4,5,7,5,7,3,9,3;D8,1.2,.8');
 UL('stage5', 'stage', 'wins', 2, 'L1,9,1,7,4,7,4,5,7,5,7,3,9,3;D7,1.2,.8;D9,1.2,.8');
