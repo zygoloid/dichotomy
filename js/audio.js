@@ -14,7 +14,7 @@ const AU = {
     try { this.setup(new AC()); } catch (e) { this.ctx = null; }
   },
   setup(ctx) {
-    this.ctx = ctx; this.mg = null; this.mLvl = undefined;
+    this.ctx = ctx; this.mg = null; this.cur = undefined; this.held = null;
     this.out = ctx.createGain(); this.out.gain.value = 0.5 * META.vol;
     const comp = ctx.createDynamicsCompressor();
     this.out.connect(comp); comp.connect(ctx.destination);
@@ -201,7 +201,10 @@ const AU = {
     const c = this.ctx;
     this.mg = c.createGain(); this.mg.gain.value = .85; this.mg.connect(this.out);
     // everything tonal runs through "duck", which the kick pulls down for the sidechain pump
-    this.duck = c.createGain(); this.duck.connect(this.mg);
+    this.duck = c.createGain();
+    // ...and then through "tone", a lowpass that is wide open except while one song is swept out for the next
+    this.tone = c.createBiquadFilter(); this.tone.type = 'lowpass'; this.tone.frequency.value = 18000; this.tone.Q.value = 4;
+    this.duck.connect(this.tone); this.tone.connect(this.mg);
     // tempo-synced feedback delay
     this.dly = c.createDelay(1.5); this.dly.delayTime.value = .3;
     const fb = c.createGain(), wet = c.createGain(), lp = c.createBiquadFilter();
@@ -213,7 +216,7 @@ const AU = {
     this.rev = c.createGain(); this.rev.gain.value = .5;
     const cv = c.createConvolver(), rw = c.createGain(), hp = c.createBiquadFilter();
     cv.buffer = ir; rw.gain.value = .55; hp.type = 'highpass'; hp.frequency.value = 350;
-    this.rev.connect(hp); hp.connect(cv); cv.connect(rw); rw.connect(this.mg);
+    this.rev.connect(hp); hp.connect(cv); cv.connect(rw); rw.connect(this.tone);
     this.lastAcid = 0;
   },
   // one enveloped oscillator -> optional lowpass -> dest (+ optional delay / reverb sends)
@@ -237,6 +240,7 @@ const AU = {
     if (o.dly) tail.connect(this.dly);
     if (o.rev) tail.connect(this.rev);
     osc.start(t); osc.stop(t + dur + .05);
+    return g;
   },
   hiss(t, dur, vol, type, fq, dest, a, rev) {
     const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), f = c.createBiquadFilter();
@@ -281,21 +285,51 @@ const AU = {
   // at = absolute time, for offline renders.
   //
   // Arrangement. Calm: a breakdown, with no drums and no melody, just soft gated chords, a held
-  // bass note and the plucks. Combat: drums, bassline and the melody throughout; the gated
+  // bass note and the plucks (the game keeps asking for combat for a few seconds after a fight). Combat: drums, bassline and the melody throughout; the gated
   // chords join for the second half of each 16-bar phrase, which ends in a snare-roll build.
   // Boss: everything throughout, the melody doubled an octave up, and a busier drum kit.
   //
-  // Changes of intensity are quantised. The tonal layers only ever change on a bar line. The
-  // drums step up on the next beat, so a fight or a boss is felt at once, and step down on the bar.
+  // Changes of intensity are quantised. The drums step up on the next beat, so a fight or a boss
+  // is felt at once, and step down on the bar. The bass and chords change on a bar line. The
+  // melody only comes or goes between its own phrases (8 bars, or 4 for the songs built on a
+  // short figure), so it is never cut off or brought in half way through.
+  //
+  // The caller's index only places a step within its bar. Bars are counted here, so the
+  // arrangement carries on unbroken when the caller's clock jumps (a new floor, a new run).
+  //
+  // A change of song is a mix, not a cut: the old song is swept out under a rising wash of noise
+  // for the rest of the bar (and the next, if little of this one is left), and the new one
+  // arrives on the downbeat, at the start of its first phrase, with a crash.
   step(i, mus, want, bpm, late, at) {
     if (!this.ctx || this.mute) return;
     if (!this.mg) this.initMusic();
-    const M = this.MUS[mus % 5], sd = 15 / bpm, t = at !== undefined ? at : this.ctx.currentTime + .06 - Math.min(late || 0, .05);
-    const s = i % 16, bar = Math.floor(i / 16), ph = bar % 16, n = M.scale.length;
-    if (this.mLvl === undefined) this.mLvl = this.dLvl = want;
+    const sd = 15 / bpm, t = at !== undefined ? at : this.ctx.currentTime + .06 - Math.min(late || 0, .05), s = i % 16, tf = this.tone.frequency;
+    mus %= 5;
+    if (this.cur === undefined || t - this.lastT > 1) { // starting from silence: no ceremony
+      if (this.cur !== mus) { this.cur = mus; this.bar = 0; }
+      this.tr = 0; tf.cancelScheduledValues(t); tf.setValueAtTime(18000, t);
+      this.mLvl = this.dLvl = this.lLvl = want;
+    } else if (s < this.ps) this.bar++;
+    this.lastT = t; this.ps = s;
+    if (this.tr > 0) {
+      if (--this.tr === 0) { // the new song lands
+        this.cur = mus; this.bar = 0; this.mLvl = this.dLvl = this.lLvl = want;
+        tf.cancelScheduledValues(t); tf.setValueAtTime(18000, t);
+        this.hiss(t, 1.6, .2, 'highpass', 4500, this.mg, 0, true);
+        this.voice('sine', 95, t, .9, .3, this.mg, { f2: 36, ft: .5, hold: .15 });
+      }
+    } else if (mus !== this.cur) { // sweep the old one out
+      this.tr = 16 - s + (s > 8 ? 16 : 0);
+      const d = this.tr * sd;
+      tf.cancelScheduledValues(t); tf.setValueAtTime(18000, t); tf.exponentialRampToValueAtTime(220, t + d);
+      this.hiss(t, d, .11, 'bandpass', 4500, this.mg, d * .97, true);
+      for (const g of this.held || []) { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0, t, d / 4); } // long calm bass notes
+    }
+    const M = this.MUS[this.cur], bar = this.bar, ph = bar % 16, n = M.scale.length;
     if (s === 0) this.mLvl = want;
     if (want > this.dLvl ? s % 4 === 0 : s === 0) this.dLvl = want;
-    const level = this.mLvl, dl = this.dLvl, boss = dl > 1;
+    if (s === 0 && bar % (M.mel ? 8 : 4) === 0) this.lLvl = want;
+    const level = this.mLvl, dl = this.tr ? 0 : this.dLvl, boss = dl > 1;
     const full = level > 1 || (level === 1 && ph >= 8), build = level > 0 && ph === 15, cut8 = build && s >= 8;
     const P4 = Math.floor(bar / 16) % 4, V = P4 % 2 === 1, pat = k => (V && M[k + 'B']) || M[k];
     const lift = M.lift && P4 === 3 ? Math.pow(2, M.lift / 12) : 1;
@@ -342,8 +376,8 @@ const AU = {
         this.lastAcid = f;
       }
     } else if (level === 0 && s === 0 && bar % M.cb === 0) {
-      this.voice('sine', hz(cm, 1), t, sd * 16 * M.cb, .09, this.mg, { a: .2, hold: .6 });
-      this.voice('triangle', hz(cm + 4, 1), t, sd * 16 * M.cb, .04, this.mg, { a: .4, hold: .6 });
+      this.held = [this.voice('sine', hz(cm, 1), t, sd * 16 * M.cb, .09, this.mg, { a: .2, hold: .6 }),
+        this.voice('triangle', hz(cm + 4, 1), t, sd * 16 * M.cb, .04, this.mg, { a: .4, hold: .6 })];
     }
 
     // --- gated supersaw chord (calm: soft and filtered; drop: wide open)
@@ -357,13 +391,14 @@ const AU = {
     if (ap >= 0 && !cut8)
       this.voice(M.arpW, hz(cm + ap, 3), t, sd * 1.5, full ? .12 : .14, this.duck, { cut: 1100 + 3200 * sweep, cut2: 500, q: 2.5, dly: true, rev: level === 0 });
 
-    // --- lead: three detuned saws, an octave doubled on bosses; silent in calm rooms
+    // --- lead: three detuned saws, an octave doubled on bosses; silent in calm rooms.
+    // It follows its own, phrase-quantised level.
     const L = lead ? lead[s] : -1;
-    if (L >= 0 && level > 0 && !build) {
+    if (L >= 0 && this.lLvl > 0 && !build) {
       let len = 1; while (s + len < 16 && lead[s + len] === -2) len++;
       const f = M.mel ? hz(L, 2) : hz(cm + L, 3), v = .1, o = { cut: 1800 + 3500 * sweep, cut2: 900, q: 1.5, hold: .6, dly: true, rev: true };
       for (const det of [-11, 0, 11]) this.voice(M.leadW || 'sawtooth', f, t, sd * (len + .4), v, this.duck, Object.assign({ det }, o));
-      if (level > 1) this.voice('square', f * 2, t, sd * (len + .2), .03, this.duck, o);
+      if (this.lLvl > 1) this.voice('square', f * 2, t, sd * (len + .2), .03, this.duck, o);
     }
   }
 };

@@ -570,7 +570,11 @@ function update(dt) {
   updateFurniture(dt);
   R.beat = R.time * PAL.bpm / 60;
   const step = Math.floor(R.beat * 4);
-  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0, PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }
+  // Music intensity: 2 for a boss, 1 in a fight, 0 otherwise. Combat lingers for a few seconds
+  // after the last enemy dies, so that clearing room after room is heard as one stretch of it.
+  const fight = (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0;
+  R.fightT = fight ? 6 : Math.max(0, (R.fightT || 0) - dt);
+  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, fight || (R.fightT > 0 ? 1 : 0), PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }
 
   // The room's current runs along a fixed axis and reverses every 16 beats: its strength s
   // eases down through zero and back up the other way, never jumping. A boss steering the

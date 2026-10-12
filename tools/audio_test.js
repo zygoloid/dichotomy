@@ -2,6 +2,7 @@
 //   node tools/audio_test.js             print level statistics for every song and intensity
 //   node tools/audio_test.js --wav DIR   also write song0.wav .. song4.wav previews into DIR
 //   ... --wav DIR --song N               write only song N (each takes a minute or two)
+//   node tools/audio_test.js --trans DIR write trans_A_B.wav previews of one song handing over to the next
 //   node tools/audio_test.js --cand DIR  write a preview of each song-0 candidate in song_candidates.js
 const { spawn } = require('child_process'), path = require('path'), os = require('os'), fs = require('fs');
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe', PORT = 9377;
@@ -36,6 +37,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     return;
   }
   if (!process.argv.includes('--song')) console.log(await run('stats()')); // a single-song export skips the statistics
+  const tr = process.argv.indexOf('--trans');
+  if (tr > 0) {
+    const dir = process.argv[tr + 1]; fs.mkdirSync(dir, { recursive: true });
+    for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 4], [0, 3]]) { const f = path.join(dir, 'trans_' + a + '_' + b + '.wav'); fs.writeFileSync(f, Buffer.from(await run('wavTrans(' + a + ',' + b + ')'), 'base64')); console.log('wrote', f); }
+  }
   const w = process.argv.indexOf('--wav');
   if (w > 0) {
     const dir = process.argv[w + 1]; fs.mkdirSync(dir, { recursive: true });
