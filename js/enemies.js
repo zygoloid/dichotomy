@@ -608,6 +608,20 @@ function updateEnemies(dt) {
       }
       if (bs < 1e9) { const dd = hyp(bx - e.x, by - e.y) || 1; e.x += (bx - e.x) / dd * 170 * d; e.y += (by - e.y) / dd * 170 * d; }
     } else if (!e.boss) for (const o of R.room.obs) { const h = circRect(e.x, e.y, e.r, o); if (h) { e.x += h.x; e.y += h.y; } }
+    // A colour field repaints every shot inside it, so an enemy of the field's own colour could
+    // never be hurt there. Such an enemy is pushed out to the rim; one that is wedged inside
+    // anyway (against a wall or a block) changes colour after a moment.
+    let inF = false;
+    for (const f of R.room.fields) {
+      if (f.pol !== e.pol) continue;
+      const dx = e.x - f.x, dy = e.y - f.y, dd = hyp(dx, dy), gap = f.r + e.r - dd;
+      if (gap <= 0) continue;
+      const a = dd ? Math.atan2(dy, dx) : rand(TAU), k = Math.min(gap, 240 * dt);
+      e.x += Math.cos(a) * k; e.y += Math.sin(a) * k;
+      if (gap > e.r) inF = true;
+    }
+    e.fT = inF ? (e.fT || 0) + dt : 0;
+    if (e.fT > 1.5) { e.pol ^= 1; e.fT = 0; fxRing(e.x, e.y, .02, 300, .3); }
     if (hyp(P.x - e.x, P.y - e.y) < e.r * .85 + P.stats.hitR) hurtPlayer();
     else if (R.room.wraps.length) { const im = holeImage(e.x, e.y); if (im && hyp(P.x - im.x, P.y - im.y) < e.r * .85 + P.stats.hitR) hurtPlayer(); }
     if (e.beams) for (const b of e.beams) {
