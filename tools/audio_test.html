@@ -1,0 +1,55 @@
+<!doctype html>
+<!-- Offline render of the soundtrack. Run with:  node tools/audio_test.js [--wav DIR]
+     Prints level statistics for every song at every intensity; with --wav it also writes a
+     preview of each song: one full 64-bar cycle (8 bars calm, 24 combat, 32 boss). -->
+<meta charset="utf-8"><pre id="out">rendering...</pre>
+<script>const META = { vol: 1 };</script>
+<script src="../js/util.js"></script>
+<script src="../js/audio.js"></script>
+<script src="song_candidates.js"></script>
+<script>
+const BPM = [126, 132, 124, 138, 140];
+// plan: [level, bars, song?] sections; a section may name a different song, and the tempo then
+// changes at once, as it does in play
+async function render(mus, plan, sr, raw) {
+  const steps = plan.reduce((a, p) => a + p[1] * 16, 0), ctx = new OfflineAudioContext(1, Math.ceil((steps * 15 / 120 + 2) * sr), sr);
+  AU.setup(ctx);
+  if (raw) { AU.out.disconnect(); AU.out.connect(ctx.destination); } // bypass the compressor to see raw levels
+  let i = 0;
+  // each change of intensity is requested five sixteenths early, as it would be mid-bar in play
+  const want = []; for (const [level, bars, m] of plan) for (let k = 0; k < bars * 16; k++) want.push([level, m === undefined ? mus : m]);
+  for (let tt = .05; i < want.length; i++) { const w = want[Math.min(want.length - 1, i + 5)]; AU.step(i, w[1], w[0], BPM[w[1]], 0, tt); tt += 15 / BPM[w[1]]; }
+  return (await ctx.startRendering()).getChannelData(0);
+}
+window.stats = async () => {
+  const out = [], sr = 22050;
+  for (let mus = 0; mus < 5; mus++) for (let level = 0; level < 3; level++) {
+    const d = await render(mus, [[level, 16]], sr, true);
+    let peak = 0, sq = 0, bad = 0, lowSq = 0, lp = 0, hiSq = 0, hp = 0;
+    const a = 1 - Math.exp(-2 * Math.PI * 150 / sr), b = 1 - Math.exp(-2 * Math.PI * 2000 / sr);
+    for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) bad++; peak = Math.max(peak, Math.abs(v)); sq += v * v; lp += a * (v - lp); lowSq += lp * lp; hp += b * (v - hp); hiSq += (v - hp) * (v - hp); }
+    const blk = Math.floor(32 * 15 / BPM[mus] * sr), env = [];
+    for (let k = 0; k < 8; k++) { let e = 0; for (let i = k * blk; i < (k + 1) * blk; i++) e += d[i] * d[i]; env.push(Math.sqrt(e / blk).toFixed(3)); }
+    out.push('song ' + mus + ' level ' + level + ': peak ' + peak.toFixed(2) + ' rms ' + Math.sqrt(sq / d.length).toFixed(3) + ' <150Hz ' + (lowSq / sq * 100).toFixed(0) + '% >2kHz ' + (hiSq / sq * 100).toFixed(0) + '% bad ' + bad + ' | 2-bar rms ' + env.join(' '));
+  }
+  return out.join('\n');
+};
+// 16-bit mono WAV as base64
+// plan: optional; the default is a full cycle of one song
+window.wav = async (mus, plan) => {
+  const sr = 32000, d = await render(mus, plan || [[0, 8], [1, 24], [2, 32]], sr, false), n = d.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i] * 1.6)) * 32767, true);
+  let bin = ''; const u = new Uint8Array(buf);
+  for (let i = 0; i < u.length; i += 8192) bin += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
+  return btoa(bin);
+};
+// song a handing over to song b in a calm room, then a fight: the melody waits for its phrase,
+// then outlasts the fight to the end of one
+window.wavTrans = (a, b) => wav(a, [[0, 6, a], [0, 4, b], [1, 14, b], [0, 8, b]]);
+// a candidate for song 0, rendered in its place
+window.wavCand = async key => { const keep = AU.MUS[0]; AU.MUS[0] = CAND[key]; try { return await wav(0); } finally { AU.MUS[0] = keep; } };
+window.ready = true;
+</script>
