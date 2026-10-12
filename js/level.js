@@ -357,13 +357,15 @@ function genFloor(stage) {
       addHazards(r);
       genTeleporters(r);
     } else if (r.type === 'treasure') {
-      const n = META.un.ped3 ? 3 : 2, ups = rollUps(n, luck);
+      const n = 1 + (META.un.tre2 ? 1 : 0) + (META.un.tre3 ? 1 : 0), ups = rollUps(n, luck);
       ups.forEach((u, i) => r.peds.push({ x: W / 2 + (i - (ups.length - 1) / 2) * 190, y: H / 2, up: u, price: 0, group: 1, taken: false }));
+      if (META.un.trer) r.peds.push({ x: W / 2, y: H / 2 + 170, reroll: true, price: 0, taken: false });
     } else if (r.type === 'shop') {
-      const ups = rollUps(2, luck + 2);
-      r.peds.push({ x: W / 2 - 190, y: H / 2, up: ups[0], price: 15 + stage * 5, taken: false });
-      r.peds.push({ x: W / 2, y: H / 2, heart: true, price: 8 + stage * 2, taken: false });
-      if (ups[1]) r.peds.push({ x: W / 2 + 190, y: H / 2, up: ups[1], price: 22 + stage * 5, taken: false });
+      const ups = rollUps(META.un.shop3 ? 2 : 1, luck + 2), items = [{ up: ups[0], price: 15 + stage * 5 }];
+      if (META.un.shop2) items.push({ heart: true, price: 8 + stage * 2 });
+      if (ups[1]) items.push({ up: ups[1], price: 22 + stage * 5 });
+      items.forEach((it, i) => r.peds.push(Object.assign({ x: W / 2 + (i - (items.length - 1) / 2) * 190, y: H / 2, taken: false }, it)));
+      if (META.un.shopr) r.peds.push({ x: W / 2, y: H / 2 + 170, reroll: true, price: 0, taken: false });
     } else if (r.type === 'challenge') {
       r.peds.push({ x: W / 2, y: H / 2, up: rollUps(1, 4, u => u.tier > 0)[0], price: 0, taken: false });
       r.waves = genWaves(stage + 1, 4).concat(genWaves(stage + 1, 6)).slice(0, 3);

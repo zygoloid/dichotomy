@@ -285,20 +285,25 @@ function drawPed(c, p, near) {
   c.strokeStyle = 'rgba(255,255,255,.25)'; c.lineWidth = 2;
   c.beginPath(); c.ellipse(p.x, p.y + 30, 26, 8, 0, 0, TAU); c.stroke();
   if (p.heart) icon(c, UP.vamp.icon, p.x, y, s, HEART, 1);
-  else {
+  else if (p.reroll) { // dims when there is nothing left to reroll
+    const live = rerollable().length > 0;
+    c.strokeStyle = live ? '#fff' : 'rgba(255,255,255,.3)'; c.lineWidth = 2; polyPath(c, p.x, y, s * .8, 8, G.t * .5); c.stroke();
+    icon(c, 'R5,5,3.3,40,330;A7.6,2.2,8.3,4.6', p.x, y, s * .8, live ? '#fff' : 'rgba(255,255,255,.3)', 1);
+  } else {
     const u = UP[p.up], col = TIER_COL[u.tier];
     c.strokeStyle = rgba(col, .8); c.lineWidth = 2; c.fillStyle = rgba(col, .1);
     polyPath(c, p.x, y, s * .85, TIER_SIDES[u.tier], u.tier === 3 ? Math.PI / 2 : G.t * .5); c.fill(); c.stroke();
     icon(c, u.icon, p.x, y, s * (u.tier === 3 ? .62 : .8), col, 1);
   }
   if (p.hpCost) icon(c, UP.scar.icon, p.x, p.y + 54, 22, HEART, 1.2);
-  if (p.price) {
-    const ok = P.shards >= p.price;
-    c.fillStyle = SHARD; polyPath(c, p.x - 14, p.y + 52, 7, 4, 0); c.fill(); num(c, p.price, p.x - 2, p.y + 52, ok ? SHARD : BAD);
+  const price = p.reroll ? R.rerollCost : p.price; // the reroll's price is the run's, not the pedestal's
+  if (price) {
+    const ok = P.shards >= price;
+    c.fillStyle = SHARD; polyPath(c, p.x - 14, p.y + 52, 7, 4, 0); c.fill(); num(c, price, p.x - 2, p.y + 52, ok ? SHARD : BAD);
   }
   if (!near) return;
-  keycap(c, p.x, p.y + (p.price || p.hpCost ? 82 : 58), 'E');
-  if (p.heart) return;
+  keycap(c, p.x, p.y + (price || p.hpCost ? 82 : 58), 'E');
+  if (p.heart || p.reroll) return;
   const dl = statDeltas(computeStats(R.ship, P.ups), P.stats);
   let x = p.x - (dl.length - 1) * 21;
   for (const d of dl) {
@@ -485,11 +490,6 @@ function drawWorld(c) {
     }
   }
   for (const p of room.peds) if (!p.taken) drawPed(c, p, p === R.nearPed);
-  if (rerollable().length) {
-    c.globalAlpha = .8; keycap(c, W / 2 - 34, BY1 - 34, 'R'); icon(c, UN.reroll.icon, W / 2 - 4, BY1 - 34, 22, '#fff', 1);
-    c.fillStyle = SHARD; polyPath(c, W / 2 + 22, BY1 - 34, 6, 4, 0); c.fill(); num(c, R.rerollCost, W / 2 + 33, BY1 - 34, P.shards >= R.rerollCost ? SHARD : BAD);
-    c.globalAlpha = 1;
-  }
   for (const p of R.pickups) {
     if (p.kind === 'shard') {
       c.fillStyle = SHARD; polyPath(c, p.x, p.y, 6, 4, G.t * 4 + p.x); c.fill();

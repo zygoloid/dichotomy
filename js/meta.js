@@ -8,6 +8,10 @@ function saveMeta() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(META))
 function loadMeta() {
   try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (d) Object.assign(META, d); } catch (e) { }
   META.stats = META.stats || {}; META.un = META.un || {};
+  // saves from before the item-room and shop chains keep what they had
+  if (META.un.ped3) META.un.tre2 = META.un.tre3 = true;
+  if (META.un.reroll) META.un.trer = META.un.shopr = true;
+  if (META.un.shop && (META.un.ped3 || META.un.reroll)) META.un.shop2 = META.un.shop3 = true;
 }
 const mGet = k => META.stats[k] || 0;
 function mAdd(k, n) { META.stats[k] = mGet(k) + (n === undefined ? 1 : n); }
@@ -21,6 +25,7 @@ const MSTAT_ICON = {
   chain: 'D2,5,1.2;D5,5,1.2;D8,5,1.2', taken: 'C5,3.6,2.4;R5,8.4,3.2,180,360;L1.8,8.4,8.2,8.4', stage: 'L1,9,1,7,4,7,4,5,7,5,7,3,9,3',
   elites: 'P5,.8,6.3,3.8,9.5,3.8,7,6,8,9.3,5,7.4,2,9.3,3,6,.5,3.8,3.7,3.8',
   lattice: 'P5,1,9,5,5,9,1,5;L3,3,7,7;L7,3,3,7', secrets: 'P1,1,9,1,9,9,1,9;L5,1,4,4,6,6,5,9', minis: 'P3,2.5,7,2.5,8.5,6,5,8.5,1.5,6;D4,5,.7;D6,5,.7',
+  tItems: 'C5,3.6,2.4;D5,3.6,1;R5,8.4,3.2,180,360;L1.8,8.4,8.2,8.4', sItems: 'P2,4,8,4,7,9,3,9;R5,4,2,180,360',
   hits: UP.berserk.icon, nohit: UP.shield.icon, asc: 'P5,1,9,9,1,9'
 };
 
@@ -57,7 +62,14 @@ UL('ship:hex', 'ship', 'absorbed', 1000);
 UL('ship:circ', 'ship', 'flips', 500);
 UL('ship:star', 'ship', 'wins', 1);
 UL('shop', 'room', 'shards', 40, 'P2,4,8,4,7,9,3,9;R5,4,2,180,360');
-UL('ped3', 'room', 'rooms', 20, 'D2,6,1;D5,6,1;D8,6,1;L1,8,9,8');
+// Item rooms and shops grow as you use them: each chain is unlocked by taking items from
+// that kind of room. An item room starts with a single item, a shop with a single upgrade.
+UL('tre2', 'room', 'tItems', 2, 'D3.5,6,1;D6.5,6,1;L1,8,9,8');          // a choice of two
+UL('tre3', 'room', 'tItems', 8, 'D2,6,1;D5,6,1;D8,6,1;L1,8,9,8');       // a choice of three
+UL('trer', 'room', 'tItems', 16, 'D2.2,7,.9;D4.6,7,.9;L1,8.6,6,8.6;R7,3.6,2.2,40,330;A8.6,1.6,9,3.4'); // and a reroll pedestal
+UL('shop2', 'room', 'sItems', 1, 'P2,4,8,4,7,9,3,9;R5,4,2,180,360;D5,6.6,.9');                    // a heart for sale
+UL('shop3', 'room', 'sItems', 4, 'P2,4,8,4,7,9,3,9;R5,4,2,180,360;D3.9,6.6,.8;D6.1,6.6,.8');      // a second upgrade
+UL('shopr', 'room', 'sItems', 10, 'P1,5,5.6,5,4.9,9,1.7,9;R3.3,5,1.4,180,360;R7.4,3.4,2,40,330;A8.8,1.6,9.2,3.2'); // and a reroll pedestal
 UL('challenge', 'room', 'bosses', 2, 'L2,2,8,8;L8,2,2,8;C5,5,4.5');
 UL('treasure2', 'room', 'taken', 40, 'C3,4,1.7;L1.3,7.5,4.7,7.5;C7,4,1.7;L5.3,7.5,8.7,7.5');
 UL('startped', 'room', 'runs', 6, 'P3,2,8,5,3,8;D2,8,1');
@@ -82,7 +94,6 @@ UL('en:weaver', 'enemy', 'bosses', 1);
 UL('en:bomber', 'enemy', 'rooms', 40);
 UL('en:mirror', 'enemy', 'kills', 500);
 UL('altar', 'room', 'elites', 5, 'P2,9,8,9,7,6,3,6;P5,5,3.2,3,4,1.5,5,2.2,6,1.5,6.8,3');
-UL('reroll', 'room', 'shards', 150, 'R5,5,3.3,40,330;A7.6,2.2,8.3,4.6');
 for (let i = 1; i <= 6; i++) UL('asc' + i, 'asc', 'asc', i);
 
 const isUnlocked = id => !UN[id] || !!META.un[id];

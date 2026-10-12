@@ -6,7 +6,7 @@ const IN = {
   padMove: { x: 0, y: 0 }, padAim: { x: 0, y: 0 }, padPrev: [],
   // Twin-stick pad: left stick moves, right stick aims and fires. Buttons are folded into
   // the same key codes the keyboard uses, so the rest of the game needs no pad logic.
-  PAD: { 0: ['Enter', 'KeyE'], 1: ['KeyQ'], 2: ['Space'], 3: ['KeyR'], 4: ['Space'], 5: ['KeyQ'], 6: ['Space'], 7: ['KeyQ'], 8: ['KeyX'], 9: ['Escape'], 10: ['Dash'], 12: ['ArrowUp'], 13: ['ArrowDown'], 14: ['ArrowLeft'], 15: ['ArrowRight'] },
+  PAD: { 0: ['Enter', 'KeyE'], 1: ['KeyQ'], 2: ['Space'], 4: ['Space'], 5: ['KeyQ'], 6: ['Space'], 7: ['KeyQ'], 8: ['KeyX'], 9: ['Escape'], 10: ['Dash'], 12: ['ArrowUp'], 13: ['ArrowDown'], 14: ['ArrowLeft'], 15: ['ArrowRight'] },
   pollPad() {
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
     let p = null;

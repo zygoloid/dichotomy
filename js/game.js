@@ -499,16 +499,28 @@ function updatePickups(dt) {
 // ---------------------------------------------------------------- room logic
 function takePed(p) {
   const P = R.P, room = R.room;
+  if (p.reroll) return rerollRoom();
   if (P.shards < p.price || (p.heart && P.hp >= P.stats.maxHp) || (p.hpCost && computeStats(R.ship, P.ups).maxHp <= 1)) { AU.sfx('deny'); return; }
   P.shards -= p.price; p.taken = true;
   if (p.hpCost) { P.ups.push('scar'); AU.sfx('hurt'); fxShake(10); R.flash = 1; }
   if (p.heart) { heal(1); AU.sfx('take'); } else giveUp(p.up);
+  if (room.type === 'treasure') mAdd('tItems'); else if (room.type === 'shop') mAdd('sItems'); // these grow the rooms (see meta.js)
   if (p.group) for (const q of room.peds) if (q.group === p.group && !q.taken) { q.taken = true; fxParts(q.x, q.y, '#888888', 12, 200); }
   if (room.type === 'challenge' && !room.done) { room.done = true; room.cleared = false; R.wave = 0; spawnWave(room.waves[0]); AU.sfx('warp'); fxShake(10); }
 }
 
-// free pedestals in the current room that a reroll would replace
-function rerollable() { return META.un.reroll ? R.room.peds.filter(p => !p.taken && p.group && p.up) : []; }
+// what a room's reroll pedestal would replace: every upgrade still on offer there
+function rerollable() { return R.room.peds.filter(p => !p.taken && p.up); }
+// The reroll pedestal: pay, and everything still on offer in the room is swapped for something
+// else. The price rises each time, for the rest of the run.
+function rerollRoom() {
+  const P = R.P, list = rerollable();
+  if (!list.length || P.shards < R.rerollCost) { AU.sfx('deny'); return; }
+  P.shards -= R.rerollCost; R.rerollCost += 2;
+  const ups = rollUps(list.length, P.stats.luck + (R.room.type === 'shop' ? 2 : 0));
+  list.forEach((p, i) => { if (ups[i]) p.up = ups[i]; fxParts(p.x, p.y, '#ffffff', 12, 220); });
+  AU.sfx('take');
+}
 
 // a shot struck a wall in a room with a hidden door: chip at it if it landed on the crack
 function hitSecret(sh) {
@@ -532,16 +544,6 @@ function updateRoom(dt) {
   if (pid !== P.preview) { P.preview = pid; recompute(); }
   R.nearPed = near;
   if (near && (IN.hit('KeyE') || IN.hit('KeyF') || IN.hit('Enter'))) takePed(near);
-  if (IN.hit('KeyR')) {
-    const list = rerollable();
-    if (list.length && P.shards < R.rerollCost) AU.sfx('deny');
-    else if (list.length) {
-      P.shards -= R.rerollCost; R.rerollCost += 2;
-      const ups = rollUps(list.length, P.stats.luck);
-      list.forEach((p, i) => { if (ups[i]) p.up = ups[i]; fxParts(p.x, p.y, '#ffffff', 12, 220); });
-      AU.sfx('take');
-    }
-  }
   if (room.portal && room.cleared && hyp(room.portal.x - P.x, room.portal.y - P.y) < 30) nextStage();
 }
 
