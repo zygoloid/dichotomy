@@ -86,7 +86,8 @@ function mirrored(specs, mode, props) {
   }
   return out;
 }
-const ringOf = (n, rx, ry, size, props) => Array.from({ length: n }, (_, i) => rc(Math.cos(i * TAU / n + TAU / (2 * n)) * rx, Math.sin(i * TAU / n + TAU / (2 * n)) * ry, size, size, props));
+// off: the angle of the first block (by default the ring straddles the horizontal axis)
+const ringOf = (n, rx, ry, size, props, off = TAU / (2 * n)) => Array.from({ length: n }, (_, i) => rc(Math.cos(i * TAU / n + off) * rx, Math.sin(i * TAU / n + off) * ry, size, size, props));
 const PATTERNS = {
   pillars: [
     () => mirrored([[270, 130, 60, 60]], 'hv'),                         // four posts
@@ -147,13 +148,14 @@ function genLayout(r) {
   }
 }
 
-// Spikes and saws, arranged so the saws patrol the lanes the spikes leave open.
+// Spikes and saws, arranged so the saws patrol the lanes the spikes leave open. Saws turn back
+// well short of the doors, and start each visit at the far end of their run (see enterRoom).
 function genDanger(r) {
   const hot = { hot: true }, saw = (ax, ay, bx, by, per, ph) => r.saws.push({ ax: CX + ax, ay: CY + ay, bx: CX + bx, by: CY + by, per, ph, r: 20, x: -99, y: -99 });
   const k = randi(0, 2);
-  if (k === 0) { r.obs = mirrored([[120, 105, 50, 50], [360, 105, 50, 50]], 'hv', hot); saw(-440, 0, 440, 0, 7, 0); }        // a gauntlet with a saw down the middle
-  else if (k === 1) { r.obs = mirrored([[250, 130, 56, 56]], 'hv', hot); saw(-440, 0, 440, 0, 7, 0); saw(0, -200, 0, 200, 4.5, .25); } // four posts, saws on the cross between them
-  else { r.obs = ringOf(6, 260, 150, 50, hot); saw(-430, -200, -430, 200, 5, 0); saw(430, 200, 430, -200, 5, 0); }           // a ring of spikes flanked by two saws
+  if (k === 0) { r.obs = mirrored([[120, 105, 50, 50], [360, 105, 50, 50]], 'hv', hot); saw(-380, 0, 380, 0, 7, 0); }        // a gauntlet with a saw down the middle
+  else if (k === 1) { r.obs = mirrored([[250, 130, 56, 56]], 'hv', hot); saw(-380, 0, 380, 0, 7, 0); saw(0, -180, 0, 180, 4.5, .25); } // four posts, saws on the cross between them
+  else { r.obs = ringOf(6, 260, 150, 50, hot, 0); saw(-380, -200, -380, 200, 5, 0); saw(380, 200, 380, -200, 5, 0); }           // a ring of spikes flanked by two saws
 }
 
 // Coloured walls with a purpose. A fort: four walls round the middle, open at the corners, that

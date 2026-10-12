@@ -138,9 +138,10 @@ function updateFurniture(dt) {
   for (const o of room.obs) if (o.mv) { const k = at(o.mv); o.x = lerp(o.mv.ax, o.mv.bx, k); o.y = lerp(o.mv.ay, o.mv.by, k); }
   for (const h of room.holes) if (h.mv) { const k = at(h.mv); h.x = lerp(h.mv.ax, h.mv.bx, k); h.y = lerp(h.mv.ay, h.mv.by, k); } // drifting wormholes
   for (const sw of room.switches) if (sw.cd > 0) sw.cd -= dt;
+  if (P.doorT > 0) P.doorT -= dt;
   for (const sa of room.saws) {
     const k = at(sa); sa.x = lerp(sa.ax, sa.bx, k); sa.y = lerp(sa.ay, sa.by, k);
-    if (hyp(P.x - sa.x, P.y - sa.y) < sa.r + P.stats.hitR) hurtPlayer();
+    if (hyp(P.x - sa.x, P.y - sa.y) < sa.r + P.stats.hitR && !(P.doorT > 0)) hurtPlayer();
   }
   updateNav();
 }
@@ -194,6 +195,13 @@ function enterRoom(room, dir) {
   R.pickups = room.pickups; R.flipRule = false; R.line = null; P.vq = [];
   if (dir) { const d = DOOR_POS[OPP[dir]]; P.x = d[0] + DIRV[dir][0] * 34; P.y = d[1] + DIRV[dir][1] * 34; }
   P.kx = P.ky = 0; P.hit = false; P.tu = null; R.nav = null; R.navT = -9;
+  // Nothing in the room's furniture can catch you in the doorway: every saw starts at the end
+  // of its run that is further from you, and spikes and saws are harmless for a moment.
+  P.doorT = .6;
+  for (const sa of room.saws) {
+    const far = hyp(sa.bx - P.x, sa.by - P.y) > hyp(sa.ax - P.x, sa.ay - P.y) + 1;
+    sa.ph = (far ? .5 : 0) - R.time / sa.per;
+  }
   for (const d of P.drones) { d.x = P.x; d.y = P.y; }
   R.orbs = []; R.slashes = []; P.hist = []; P.fl.x = P.x; P.fl.y = P.y; P.fl.vx = P.fl.vy = 0;
   room.visited = room.seen = true;
@@ -384,7 +392,7 @@ function updatePlayer(dt) {
   if (R.flow) { px += R.flow.x * 75; py += R.flow.y * 75; }
   P.x += (P.vx + P.kx + px) * dt; P.y += (P.vy + P.ky + py) * dt;
   P.still = hyp(P.vx, P.vy) < s.move * .2 ? P.still + dt : 0;
-  for (const o of room.obs) { const h = circRect(P.x, P.y, 12, o); if (h) { P.x += h.x; P.y += h.y; if (o.hot) hurtPlayer(); } }
+  for (const o of room.obs) { const h = circRect(P.x, P.y, 12, o); if (h) { P.x += h.x; P.y += h.y; if (o.hot && !(P.doorT > 0)) hurtPlayer(); } }
   for (const g of room.gates) if (g.pol !== P.pol) { const h = circRect(P.x, P.y, 12, g); if (h) { P.x += h.x; P.y += h.y; } }
   // walls, with gaps where doors are open
   const pr = 12, open = room.cleared, D = room.doors;
