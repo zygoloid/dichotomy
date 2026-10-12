@@ -14,7 +14,9 @@ async function render(mus, plan, sr, raw) {
   AU.setup(ctx);
   if (raw) { AU.out.disconnect(); AU.out.connect(ctx.destination); } // bypass the compressor to see raw levels
   let i = 0;
-  for (const [level, bars] of plan) for (let k = 0; k < bars * 16; k++, i++) AU.step(i, mus, level, BPM[mus], 0, .05 + i * sd);
+  // each change of intensity is requested five sixteenths early, as it would be mid-bar in play
+  const want = []; for (const [level, bars] of plan) for (let k = 0; k < bars * 16; k++) want.push(level);
+  for (; i < want.length; i++) AU.step(i, mus, want[Math.min(want.length - 1, i + 5)], BPM[mus], 0, .05 + i * sd);
   return (await ctx.startRendering()).getChannelData(0);
 }
 window.stats = async () => {

@@ -14,7 +14,7 @@ const AU = {
     try { this.setup(new AC()); } catch (e) { this.ctx = null; }
   },
   setup(ctx) {
-    this.ctx = ctx; this.mg = null;
+    this.ctx = ctx; this.mg = null; this.mLvl = undefined;
     this.out = ctx.createGain(); this.out.gain.value = 0.5 * META.vol;
     const comp = ctx.createDynamicsCompressor();
     this.out.connect(comp); comp.connect(ctx.destination);
@@ -251,6 +251,10 @@ const AU = {
     const g = this.duck.gain;
     g.cancelScheduledValues(t); g.setValueAtTime(.4, t); g.linearRampToValueAtTime(1, t + .17);
   },
+  snare(t, vol) {
+    this.hiss(t, .13, vol, 'bandpass', 2300, this.mg, 0, true);
+    this.voice('triangle', 200, t, .09, vol * .8, this.mg, { f2: 130 });
+  },
   clap(t, vol) {
     for (let k = 0; k < 3; k++) this.hiss(t + k * .011, .02, vol * .7, 'bandpass', 1500, this.mg);
     this.hiss(t + .03, .16, vol, 'bandpass', 1500, this.mg, 0, true);
@@ -272,17 +276,26 @@ const AU = {
     }
     g.connect(fl); fl.connect(this.duck); fl.connect(this.rev);
   },
-  // i = sixteenth-note index; level 0 calm, 1 combat, 2 boss; late = seconds since the step
-  // was due (keeps spacing even despite frame timing); at = absolute time, for offline renders.
+  // i = sixteenth-note index; want = the intensity the game is asking for (0 calm, 1 combat,
+  // 2 boss); late = seconds since the step was due (keeps spacing even despite frame timing);
+  // at = absolute time, for offline renders.
   //
-  // Arrangement: calm rooms are a breakdown (no kick; chords, plucks and melody). Combat is a
-  // 16-bar loop: 8 bars of groove, then 8 with the gated chords and lead on top, ending in a
-  // snare-roll build. Bosses stay in the full drop. So walking into a fight is the drop.
-  step(i, mus, level, bpm, late, at) {
+  // Arrangement. Calm: a breakdown, with no drums and no melody, just soft gated chords, a held
+  // bass note and the plucks. Combat: drums, bassline and the melody throughout; the gated
+  // chords join for the second half of each 16-bar phrase, which ends in a snare-roll build.
+  // Boss: everything throughout, the melody doubled an octave up, and a busier drum kit.
+  //
+  // Changes of intensity are quantised. The tonal layers only ever change on a bar line. The
+  // drums step up on the next beat, so a fight or a boss is felt at once, and step down on the bar.
+  step(i, mus, want, bpm, late, at) {
     if (!this.ctx || this.mute) return;
     if (!this.mg) this.initMusic();
     const M = this.MUS[mus % 5], sd = 15 / bpm, t = at !== undefined ? at : this.ctx.currentTime + .06 - Math.min(late || 0, .05);
     const s = i % 16, bar = Math.floor(i / 16), ph = bar % 16, n = M.scale.length;
+    if (this.mLvl === undefined) this.mLvl = this.dLvl = want;
+    if (s === 0) this.mLvl = want;
+    if (want > this.dLvl ? s % 4 === 0 : s === 0) this.dLvl = want;
+    const level = this.mLvl, dl = this.dLvl, boss = dl > 1;
     const full = level > 1 || (level === 1 && ph >= 8), build = level > 0 && ph === 15, cut8 = build && s >= 8;
     const P4 = Math.floor(bar / 16) % 4, V = P4 % 2 === 1, pat = k => (V && M[k + 'B']) || M[k];
     const lift = M.lift && P4 === 3 ? Math.pow(2, M.lift / 12) : 1;
@@ -294,19 +307,24 @@ const AU = {
       : V ? (bar % 4 === 3 ? M.leadD : M.leadC) : (bar % 4 === 3 ? M.leadB : M.leadA);
     this.dly.delayTime.setValueAtTime(sd * 3, t);
 
-    // --- drums: four on the floor, clap on 2 and 4, open hat on every off-beat
-    if (level > 0) {
-      if (s % 4 === 0 && !cut8) this.kick(t, .58);
-      if ((s === 4 || s === 12) && !cut8) this.clap(t, .42);
-      if (V && s === 15 && bar % 2 === 1 && !build) this.clap(t, .2);                                    // ghost clap in the variation phrases
-      if (s % 4 === 2) this.hiss(t, .12, .24, 'highpass', 7000, this.mg);
-      else if (s % 4 !== 0) this.hiss(t, .03, s % 4 === 3 ? .13 : .08, 'highpass', 9500, this.mg);
-      if ((full || P4 >= 2) && s % 4 === 0) this.hiss(t, .22, .09, 'bandpass', 6500, this.mg);                         // ride
+    // --- drums: four on the floor, clap on 2 and 4, open hat on every off-beat.
+    // The boss kit adds syncopated kicks, a snare under the clap, full sixteenth hats, an
+    // eighth-note ride, a tom fill every fourth bar and a crash every four bars.
+    if (dl > 0) {
+      if (s % 4 === 0 && !cut8) this.kick(t, boss ? .64 : .58);
+      if (boss && !cut8 && (s === 7 || (s === 14 && bar % 2 === 1))) this.kick(t, .4);
+      if ((s === 4 || s === 12) && !cut8) { this.clap(t, .42); if (boss) this.snare(t, .3); }
+      if (s === 15 && !build && (boss || (V && bar % 2 === 1))) this.clap(t, .2);                          // ghost clap
+      if (s % 4 === 2) this.hiss(t, .12, boss ? .3 : .24, 'highpass', 7000, this.mg);
+      else if (s % 4 !== 0) this.hiss(t, .03, (s % 4 === 3 ? .13 : .08) * (boss ? 1.6 : 1), 'highpass', 9500, this.mg);
+      else if (boss) this.hiss(t, .03, .1, 'highpass', 9500, this.mg);
+      if (boss ? s % 2 === 0 : (full || P4 >= 2) && s % 4 === 0) this.hiss(t, .22, boss ? .11 : .09, 'bandpass', 6500, this.mg); // ride
+      if (boss && bar % 4 === 3 && s >= 12 && !build) this.voice('sine', [210, 175, 140, 105][s - 12], t, .16, .4, this.mg, { f2: [210, 175, 140, 105][s - 12] * .6 }); // toms
       if (build) {                                                                                       // roll: quarters, eighths, sixteenths
         if (s === 0) this.hiss(t, sd * 16, .25, 'bandpass', 4500, this.duck, sd * 15.5, true);
         if (s === 0 || s === 4 || s === 8 || s === 10 || s >= 12) this.hiss(t, .09, .16 + s * .022, 'bandpass', 1800 + s * 60, this.mg, 0, true);
       } else if (ph === 7 && s >= 13) this.hiss(t, .07, .22, 'bandpass', 1900, this.mg);
-      if (ph % 8 === 0 && s === 0 && bar > 0) this.hiss(t, 1.6, .22, 'highpass', 4500, this.mg, 0, true);   // crash on the downbeat
+      if ((ph % 8 === 0 || (boss && bar % 4 === 0)) && s === 0 && bar > 0) this.hiss(t, 1.6, .22, 'highpass', 4500, this.mg, 0, true); // crash on the downbeat
     } else if (s % 4 === 2) this.hiss(t, .03, .07, 'highpass', 9000, this.mg);
 
     // --- bass
@@ -339,11 +357,11 @@ const AU = {
     if (ap >= 0 && !cut8)
       this.voice(M.arpW, hz(cm + ap, 3), t, sd * 1.5, full ? .12 : .14, this.duck, { cut: 1100 + 3200 * sweep, cut2: 500, q: 2.5, dly: true, rev: level === 0 });
 
-    // --- lead: three detuned saws, an octave doubled on bosses; short repeating figures
+    // --- lead: three detuned saws, an octave doubled on bosses; silent in calm rooms
     const L = lead ? lead[s] : -1;
-    if (L >= 0 && (full || (level === 0 && bar % 8 >= 4)) && !build) {
+    if (L >= 0 && level > 0 && !build) {
       let len = 1; while (s + len < 16 && lead[s + len] === -2) len++;
-      const f = M.mel ? hz(L, 2) : hz(cm + L, 3), v = level ? .1 : .06, o = { cut: 1800 + 3500 * sweep, cut2: 900, q: 1.5, hold: .6, dly: true, rev: true };
+      const f = M.mel ? hz(L, 2) : hz(cm + L, 3), v = .1, o = { cut: 1800 + 3500 * sweep, cut2: 900, q: 1.5, hold: .6, dly: true, rev: true };
       for (const det of [-11, 0, 11]) this.voice(M.leadW || 'sawtooth', f, t, sd * (len + .4), v, this.duck, Object.assign({ det }, o));
       if (level > 1) this.voice('square', f * 2, t, sd * (len + .2), .03, this.duck, o);
     }
