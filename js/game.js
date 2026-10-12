@@ -178,6 +178,8 @@ function startStage(i) {
   R.stage = i; PAL = STAGES[R.route[i]];
   R.hpMul = (1 + .4 * i) * (1 + .2 * R.asc);
   mMax('stage', i + 1);
+  // arriving on Lattice unlocks wormholes, in time for this very floor to have them
+  if (PAL.haz.tele) { mMax('lattice', 1); toast(checkUnlocks()); }
   R.offered = new Set();
   R.floor = genFloor(i);
   R.P.x = W / 2; R.P.y = H / 2;
