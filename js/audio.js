@@ -202,9 +202,9 @@ const AU = {
     this.mg = c.createGain(); this.mg.gain.value = .85; this.mg.connect(this.out);
     // everything tonal runs through "duck", which the kick pulls down for the sidechain pump
     this.duck = c.createGain();
-    // ...and then through "tone", a lowpass that is wide open except while one song is swept out for the next
-    this.tone = c.createBiquadFilter(); this.tone.type = 'lowpass'; this.tone.frequency.value = 18000; this.tone.Q.value = 4;
-    this.duck.connect(this.tone); this.tone.connect(this.mg);
+    // ...and then through "mix", a lowpass that is wide open except while one song is swept out for the next
+    this.mix = c.createBiquadFilter(); this.mix.type = 'lowpass'; this.mix.frequency.value = 18000; this.mix.Q.value = 4;
+    this.duck.connect(this.mix); this.mix.connect(this.mg);
     // tempo-synced feedback delay
     this.dly = c.createDelay(1.5); this.dly.delayTime.value = .3;
     const fb = c.createGain(), wet = c.createGain(), lp = c.createBiquadFilter();
@@ -216,7 +216,7 @@ const AU = {
     this.rev = c.createGain(); this.rev.gain.value = .5;
     const cv = c.createConvolver(), rw = c.createGain(), hp = c.createBiquadFilter();
     cv.buffer = ir; rw.gain.value = .55; hp.type = 'highpass'; hp.frequency.value = 350;
-    this.rev.connect(hp); hp.connect(cv); cv.connect(rw); rw.connect(this.tone);
+    this.rev.connect(hp); hp.connect(cv); cv.connect(rw); rw.connect(this.mix);
     this.lastAcid = 0;
   },
   // one enveloped oscillator -> optional lowpass -> dest (+ optional delay / reverb sends)
@@ -303,7 +303,7 @@ const AU = {
   step(i, mus, want, bpm, late, at) {
     if (!this.ctx || this.mute) return;
     if (!this.mg) this.initMusic();
-    const sd = 15 / bpm, t = at !== undefined ? at : this.ctx.currentTime + .06 - Math.min(late || 0, .05), s = i % 16, tf = this.tone.frequency;
+    const sd = 15 / bpm, t = at !== undefined ? at : this.ctx.currentTime + .06 - Math.min(late || 0, .05), s = i % 16, tf = this.mix.frequency;
     mus %= 5;
     if (this.cur === undefined || t - this.lastT > 1) { // starting from silence: no ceremony
       if (this.cur !== mus) { this.cur = mus; this.bar = 0; }
