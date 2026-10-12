@@ -768,8 +768,9 @@ function drawTitle(c) {
   drawBG(c, G.t * 2);
   c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '900 92px "Segoe UI",system-ui,sans-serif';
   const off = Math.sin(G.t * 2) * 4;
-  c.lineWidth = 3; c.strokeStyle = STAGES[0].pc[1]; c.strokeText('GEOMETRY', W / 2 - off, 170); c.strokeStyle = STAGES[0].pc[0]; c.strokeText('GEOMETRY', W / 2 + off, 170);
-  c.fillStyle = '#fff'; c.fillText('BASH', W / 2, 262);
+  // the name is drawn like the polarity disc: one half solid, the other half hollow
+  c.lineWidth = 3; c.strokeStyle = STAGES[0].pc[1]; c.strokeText('DICHOTOMY', W / 2 - off, 215); c.strokeStyle = STAGES[0].pc[0]; c.strokeText('DICHOTOMY', W / 2 + off, 215);
+  c.save(); c.beginPath(); c.rect(0, 0, W / 2, H); c.clip(); c.fillStyle = '#fff'; c.fillText('DICHOTOMY', W / 2, 215); c.restore();
   const n = SHIPS.length;
   for (let i = 0; i < n; i++) {
     const sh = SHIPS[i], ok = sh.id === 'tri' || META.un['ship:' + sh.id], sel = i === G.shipSel, x = W / 2 + (i - (n - 1) / 2) * 120, y = 420;

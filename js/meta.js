@@ -2,11 +2,11 @@
 // Persistent progression. Everything unlockable is one row in UNLOCKS, gated on a
 // lifetime counter, so the gallery and the unlock checks share a single table.
 const META = { stats: {}, un: {}, ship: 'tri', asc: 0, mute: false, fx: 1, vol: 1 };
-const SAVE_KEY = 'geometry-bash-1';
+const SAVE_KEY = 'dichotomy-1', OLD_SAVE_KEY = 'geometry-bash-1'; // the game's first name; old saves are still read
 
 function saveMeta() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(META)); } catch (e) { } }
 function loadMeta() {
-  try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (d) Object.assign(META, d); } catch (e) { }
+  try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem(OLD_SAVE_KEY) || 'null'); if (d) Object.assign(META, d); } catch (e) { }
   META.stats = META.stats || {}; META.un = META.un || {};
   // saves from before the item-room and shop chains keep what they had
   if (META.un.ped3) META.un.tre2 = META.un.tre3 = true;
