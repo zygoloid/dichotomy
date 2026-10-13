@@ -1,6 +1,8 @@
 'use strict';
 const PAUSE_QUIT = { x: W / 2 + 90, y: 115 };
-const G = { hitstop: 0, state: 'title', t: 0, toasts: [], endT: 0, newUn: [], shipSel: 0, debug: false, demo: false };
+const G = { hitstop: 0, state: 'title', t: 0, toasts: [], endT: 0, newUn: [], shipSel: 0, debug: false, demo: false, idle: 0, attract: null, fade: 0, profSel: 0, profHold: 0, profMsg: null };
+const inMenu = () => G.state === 'title' || G.state === 'gallery' || G.state === 'profiles';
+const pilotGone = () => R.over && R.P.hp <= 0; // destroyed: the wreck is not drawn
 
 // ---------------------------------------------------------------- fx helpers
 function fxRing(x, y, str, spd, life) { if (R.fx.length < 24) R.fx.push({ x, y, str, spd, life, t: 0 }); }
@@ -582,7 +584,7 @@ function update(dt) {
   // after the last enemy dies, so that clearing room after room is heard as one stretch of it.
   const fight = (R.room.type === 'boss' || R.room.type === 'mini') && !R.room.cleared ? 2 : R.enemies.length ? 1 : 0;
   R.fightT = fight ? 6 : Math.max(0, (R.fightT || 0) - dt);
-  if (step !== R.lastStep) { R.lastStep = step; AU.step(step, PAL.mus, fight || (R.fightT > 0 ? 1 : 0), PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }
+  if (step !== R.lastStep && !G.attract) { R.lastStep = step; AU.step(step, PAL.mus, fight || (R.fightT > 0 ? 1 : 0), PAL.bpm, (R.beat * 4 - step) * 15 / PAL.bpm); }
 
   // The room's current runs along a fixed axis and reverses every 16 beats: its strength s
   // eases down through zero and back up the other way, never jumping. A boss steering the
@@ -621,8 +623,11 @@ function update(dt) {
 }
 
 // ---------------------------------------------------------------- menus
+const syncShip = () => { G.shipSel = Math.max(0, SHIPS.findIndex(s => s.id === META.ship)); };
+const TITLE_PROF = { x: 66, y: 74 }; // the profile emblem on the title screen
 function updateTitle() {
   const n = SHIPS.length;
+  if (IN.hit('KeyP') || IN.hit('Profiles') || (IN.mhit[0] && hyp(IN.mx - TITLE_PROF.x, IN.my - TITLE_PROF.y - 16) < 62)) { G.state = 'profiles'; G.profSel = SLOT; G.profHold = 0; G.profMsg = null; return; }
   if (IN.hit('KeyA') || IN.hit('ArrowLeft')) G.shipSel = (G.shipSel + n - 1) % n;
   if (IN.hit('KeyD') || IN.hit('ArrowRight')) G.shipSel = (G.shipSel + 1) % n;
   const ma = maxAsc();
@@ -635,6 +640,82 @@ function updateTitle() {
     if (!ok) { AU.sfx('deny'); return; }
     META.ship = ship.id; saveMeta(); newRun();
   }
+}
+
+// ---- profiles: three cards, one per save. A/D pick one, SPACE plays it, E sends it out as a
+// file, I reads one into a fresh slot, and holding X wipes it.
+const PROF = { y: 300, dx: 340, w: 280, h: 400, by: 566, hold: 1.4 };
+const profX = i => W / 2 + (i - 1) * PROF.dx;
+const profBtn = (i, k) => profX(i) + (k - 1) * 94; // the three actions under a card: play, file, wipe
+function updateProfiles(dt) {
+  if (IN.hit('Escape') || IN.hit('KeyP') || IN.hit('Profiles')) { G.state = 'title'; return; }
+  let s = G.profSel;
+  if (IN.hit('KeyA') || IN.hit('ArrowLeft')) s = (s + NSLOTS - 1) % NSLOTS;
+  if (IN.hit('KeyD') || IN.hit('ArrowRight')) s = (s + 1) % NSLOTS;
+  const onCard = i => Math.abs(IN.mx - profX(i)) < PROF.w / 2 && Math.abs(IN.my - PROF.y) < PROF.h / 2;
+  if (IN.mouseIdle < .05) for (let i = 0; i < NSLOTS; i++) if (onCard(i)) s = i; // as in the gallery, only a moving mouse picks
+  if (s !== G.profSel) G.profHold = 0;
+  G.profSel = s;
+  if (G.profMsg && (G.profMsg.t += dt) > 1) G.profMsg = null;
+  const fresh = isFresh(slotData(s)), click = IN.mhit[0], over = k => hyp(IN.mx - profBtn(s, k), IN.my - PROF.by) < 36;
+  const said = ok => { G.profMsg = { i: s, ok, t: 0 }; AU.sfx(ok ? 'unlock' : 'deny'); };
+  // wiping is the one thing here that cannot be undone, so it has to be held
+  if (!fresh && (IN.held('KeyX') || (IN.mb[0] && over(2)))) {
+    if ((G.profHold += dt) >= PROF.hold) { deleteSlot(s); syncShip(); G.profHold = 0; G.profMsg = { i: s, ok: false, t: 0 }; AU.sfx('boom'); }
+    return;
+  }
+  G.profHold = 0;
+  if (IN.hit('Space') || IN.hit('Enter') || (click && (over(0) || onCard(s)))) { switchSlot(s); syncShip(); AU.sfx('take'); G.state = 'title'; return; }
+  const file = click && over(1);
+  if ((IN.hit('KeyE') || file) && !fresh) said(exportProfile(s));
+  else if ((IN.hit('KeyI') || file) && fresh) importProfile(s, ok => { syncShip(); G.profMsg = { i: s, ok, t: 0 }; AU.sfx(ok ? 'unlock' : 'deny'); });
+  else if (IN.hit('KeyE') || IN.hit('KeyI') || IN.hit('KeyX') || (click && over(2))) AU.sfx('deny');
+}
+
+// ---- attract mode: leave the title alone for a while and the game plays itself, on a copy of
+// the profile so that nothing it does is kept. It shows only what the profile has unlocked.
+const ATTRACT = { wait: 20, len: 34, again: 10, fade: .7 };
+function startAttract() {
+  const keep = { stats: META.stats, un: META.un, ship: META.ship, asc: META.asc, god: G.god };
+  META.stats = Object.assign({}, keep.stats); META.un = Object.assign({}, keep.un); META.asc = 0;
+  META.ship = pick(SHIPS.filter(s => s.id === 'tri' || META.un['ship:' + s.id])).id;
+  G.noSave = true; AU.quiet = true; G.god = false;
+  G.attract = { t: 0, end: ATTRACT.len, clearT: 0, keep };
+  newRun();
+  // somewhere the profile has been, with about the build it would have by then
+  const depth = randi(0, Math.min(R.nStages, Math.max(1, keep.stats.stage || 1)) - 1);
+  if (depth) startStage(depth);
+  for (const id of rollUps(3 + 2 * depth, 1)) giveUp(id);
+  R.P.hp = R.P.stats.maxHp;
+  attractRoom();
+  G.state = 'attract'; G.hitstop = 0; G.toasts = [];
+}
+function attractRoom() {
+  const A = G.attract, left = R.floor.rooms.filter(r => !r.cleared && r.type === 'fight');
+  const r = left.length ? pick(left) : R.floor.rooms.find(r => !r.cleared && r.type === 'boss');
+  A.clearT = 0;
+  if (r) enterRoom(r, null); else A.end = Math.min(A.end, A.t + 1);
+}
+function endAttract(idle) {
+  const k = G.attract.keep;
+  META.stats = k.stats; META.un = k.un; META.ship = k.ship; META.asc = k.asc; G.god = k.god;
+  G.attract = null; G.noSave = false; AU.quiet = false;
+  G.state = 'title'; PAL = STAGES[0]; G.idle = idle; G.fade = 1; G.hitstop = 0; G.toasts = []; G.newUn = [];
+  IN.keys = {}; IN.mb = [false, false, false]; // the autopilot's hands come off the controls
+}
+function updateAttract(dt) {
+  const A = G.attract;
+  A.t += dt;
+  if (R.over) updateFx(dt * .5);
+  else {
+    demoBot();
+    if (R.killCam > 0) R.killCam -= dt;
+    if (G.hitstop > 0) G.hitstop -= dt; else update(dt * (R.killCam > 0 ? .25 : 1));
+    if (G.state !== 'attract') { G.state = 'attract'; A.end = Math.min(A.end, A.t + 2.2); } // destroyed, or through the last portal
+    else if (R.room.cleared && (A.clearT += dt) > 1.6) attractRoom();
+  }
+  G.toasts.length = 0; // nothing it unlocks is real
+  if (A.t >= A.end) endAttract(ATTRACT.wait - ATTRACT.again);
 }
 
 // ---- gallery: a scrolling grid of everything that can be unlocked
@@ -666,14 +747,22 @@ function updateGallery(dt) {
 function frame(dt) {
   G.t += dt;
   if (IN.any) AU.init();
+  // anything at all ends the attract mode, and that key or click does nothing else
+  if (G.attract && (IN.any || IN.mouseIdle < .05)) { endAttract(0); IN.pressed = {}; IN.mhit = [false, false, false]; }
   if (IN.hit('KeyM')) { AU.mute = META.mute = !AU.mute; saveMeta(); }
-  if (G.state === 'title' || G.state === 'gallery') {
+  if (G.fade > 0) G.fade -= dt / ATTRACT.fade;
+  if (inMenu() || G.attract) {
     // menu music: the first song at its calmest
     const b = G.t * 126 / 15, st = Math.floor(b);
     if (st !== G.mstep) { G.mstep = st; AU.step(st, 0, 0, 126, (b - st) * 15 / 126); }
   }
   switch (G.state) {
-    case 'title': updateTitle(); break;
+    case 'title':
+      G.idle = IN.any || IN.mouseIdle < .05 ? 0 : G.idle + dt;
+      if (G.idle > ATTRACT.wait && !G.demo) startAttract(); else updateTitle();
+      break;
+    case 'attract': updateAttract(dt); break;
+    case 'profiles': updateProfiles(dt); break;
     case 'play':
       if (IN.hit('Escape') || IN.hit('KeyP')) G.state = 'pause';
       else {

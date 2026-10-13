@@ -21,7 +21,25 @@
   G.debug = hash.includes('dbg');
   G.demo = hash.includes('demo');
   if (G.demo) {
-    if (hash.includes('gallery')) { G.state = 'gallery'; G.galSel = +((/sel(d+)/.exec(hash) || [])[1] || 0); }
+    if (hash.includes('sample')) {
+      // made-up profiles for screenshots, never saved: sample0-3 chooses how far the one in play has got
+      const mk = (k, ship) => {
+        const p = freshProfile(), list = UNLOCKS.slice(0, [0, 12, 46, UNLOCKS.length][k]);
+        if (!k) return p;
+        for (const u of list) p.un[u.id] = true;
+        if (k > 1) for (const id of ['stage4', 'stage5', 'asc1', 'asc2'].concat(k > 2 ? [] : ['ship:' + ship])) p.un[id] = true;
+        p.stats = { stage: [0, 1, 5, 6][k], runs: [0, 5, 61, 240][k], bosses: [0, 0, 19, 150][k], wins: [0, 0, 2, 31][k], kills: [0, 96, 4870, 30512][k], rooms: [0, 14, 410, 2204][k], taken: [0, 9, 388, 1987][k] };
+        p.ship = ship;
+        return p;
+      };
+      const k = +(/sample(\d)/.exec(hash) || [0, 2])[1];
+      G.noSave = true; G.fakeSlots = [mk(k, 'dia'), mk(1, 'tri'), mk(0, 'tri')];
+      if (k === 2) { G.fakeSlots[1] = mk(3, 'star'); G.fakeSlots[2] = mk(1, 'tri'); }
+      useProfile(G.fakeSlots[0]); G.shipSel = Math.max(0, SHIPS.findIndex(s => s.id === META.ship));
+    }
+    if (hash.includes('profiles')) { G.state = 'profiles'; G.profSel = +((/sel(\d+)/.exec(hash) || [])[1] || 0); }
+    else if (hash.includes('attract')) { startAttract(); IN.mouseIdle = 9; for (let i = 0; i < 60 * +((/-t(\d+)/.exec(hash) || [0, 3])[1]); i++) { frame(1 / 60); IN.end(); } }
+    else if (hash.includes('gallery')) { G.state = 'gallery'; G.galSel = +((/sel(d+)/.exec(hash) || [])[1] || 0); }
     else if (!hash.includes('title')) {
       if (hash.includes('unlockall')) for (const u of UNLOCKS) META.un[u.id] = true;
       newRun();

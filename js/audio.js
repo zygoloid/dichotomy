@@ -51,7 +51,7 @@ const AU = {
   },
   GAP: { shoot: .05, hit: .04, tink: .05, absorb: .03, kill: .05, graze: .06, pick: .04 },
   sfx(n, v) {
-    if (!this.ctx || this.mute) return;
+    if (!this.ctx || this.mute || this.quiet) return; // quiet: the attract mode plays without effects
     const t = this.ctx.currentTime;
     if (t - (this.last[n] || -1) < (this.GAP[n] || .02)) return;
     this.last[n] = t;

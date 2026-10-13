@@ -24,8 +24,58 @@ for (let trial = 0; trial < 600; trial++) {
 console.log('no-op check:', bad ? bad + ' failures' : 'ok', '(' + UPS.length + ' upgrades)');
 
 // 2. screens
-for (const s of ['title', 'gallery']) { G.state = s; IN.mx = 300; IN.my = 300; frame(1 / 60); render(CTX); }
+for (const s of ['title', 'gallery', 'profiles']) { G.state = s; IN.mx = 300; IN.my = 300; frame(1 / 60); render(CTX); }
 G.state = 'title';
+
+// 2b. profiles: each slot keeps its own progress, settings are shared, a wipe leaves a fresh slot,
+// and what is exported comes back the same
+{
+  const fail = m => console.log('PROFILE FAIL:', m);
+  mAdd('kills', 7); META.un.shop = true; META.vol = .5; saveMeta();
+  switchSlot(1);
+  if (!isFresh(META) || META.un.shop) fail('slot 2 not fresh');
+  if (META.vol !== .5) fail('settings not shared');
+  mAdd('kills', 3); switchSlot(0);
+  if (mGet('kills') !== 7 || !META.un.shop) fail('slot 1 lost progress');
+  if (slotData(1).stats.kills !== 3) fail('slot 2 not stored');
+  const text = JSON.stringify({ game: 'dichotomy', v: 1, profile: packProfile(slotData(0)) }), back = parseProfile(text);
+  if (!back || JSON.stringify(packProfile(back)) !== JSON.stringify(packProfile(META))) fail('export does not round-trip');
+  for (const junk of ['', 'null', '[]', '{"game":"dichotomy"}', '{"game":"other","profile":{}}', '"x"']) if (parseProfile(junk)) fail('junk accepted: ' + junk);
+  const odd = parseProfile('{"stats":{"kills":"9","runs":2,"x":-1},"un":{"shop":1},"ship":"nope","asc":99}');
+  if (!odd || odd.stats.kills || odd.stats.runs !== 2 || odd.un.shop !== true || odd.ship !== 'tri' || odd.asc !== 6) fail('import not cleaned ' + JSON.stringify(odd));
+  SLOT = 1; loadMeta(); // a reload comes back to the slot that was in play
+  if (SLOT !== 0 || mGet('kills') !== 7) fail('reload');
+  deleteSlot(1); deleteSlot(0);
+  if (!isFresh(META) || !isFresh(slotData(1)) || META.vol !== .5) fail('wipe');
+  // the screen itself: pick the third slot, play it; then hold X on it
+  G.state = 'profiles'; G.profSel = 0; IN.mouseIdle = 9;
+  IN.pressed.KeyD = true; frame(1 / 60); IN.end(); IN.pressed.KeyD = true; frame(1 / 60); IN.end();
+  IN.pressed.Space = true; frame(1 / 60); IN.end();
+  if (G.state !== 'title' || SLOT !== 2) fail('choosing a slot: ' + G.state + ' ' + SLOT);
+  mAdd('runs'); G.state = 'profiles'; G.profSel = 2; IN.keys.KeyX = true;
+  for (let i = 0; i < 60; i++) { frame(1 / 60); render(CTX); IN.end(); }
+  if (isFresh(META)) fail('wiped too soon');
+  for (let i = 0; i < 40; i++) { frame(1 / 60); render(CTX); IN.end(); }
+  IN.keys = {};
+  if (!isFresh(META)) fail('hold did not wipe');
+  switchSlot(0); G.state = 'title'; META.vol = 1;
+  console.log('profiles ok');
+}
+
+// 2c. attract mode: starts by itself, plays on a copy, and gives everything back
+{
+  mAdd('kills', 5); META.un['ship:sq'] = true; META.ship = 'tri';
+  const before = JSON.stringify(META), store0 = JSON.stringify(localStorage.getItem(slotKey(SLOT)));
+  for (let round = 0; round < 6; round++) {
+    G.idle = 0; let n = 0, dead = 0;
+    while (!G.attract && n++ < 60 * 25) { frame(1 / 60); IN.end(); }
+    if (!G.attract) { console.log('ATTRACT FAIL: never started'); break; }
+    for (n = 0; G.attract && n < 60 * 60; n++) { frame(1 / 60); if (n % 7 === 0) render(CTX); if (R.over) dead++; IN.end(); if (round === 5 && n === 200) IN.any = true; }
+    console.log('attract', round, 'ran', (n / 60).toFixed(1) + 's', 'ship', R.ship.id, 'stage', R.stage, 'rooms', R.st.rooms, 'kills', R.st.kills, dead ? 'destroyed' : 'alive', G.state);
+    if (G.state !== 'title' || JSON.stringify(META) !== before || JSON.stringify(localStorage.getItem(slotKey(SLOT))) !== store0) console.log('ATTRACT FAIL: state leaked', G.state, JSON.stringify(META));
+  }
+  delete META.stats.kills; delete META.un['ship:sq']; G.toasts = [];
+}
 
 // 3. fresh-save run: base ship, bot plays until death (or 4 minutes)
 G.god = false;

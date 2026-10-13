@@ -8,7 +8,7 @@ const store = {};
 const sb = {
   console, Math, JSON, Set, Map, Float32Array, Object, Array, Number, String, Error,
   document: { getElementById: canvas, createElement: canvas },
-  localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } },
+  localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
   requestAnimationFrame: noop, location: { hash: '' }, addEventListener: noop, CTX: ctx2d
 };
 sb.window = sb;

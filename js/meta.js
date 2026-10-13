@@ -1,18 +1,116 @@
 'use strict';
 // Persistent progression. Everything unlockable is one row in UNLOCKS, gated on a
 // lifetime counter, so the gallery and the unlock checks share a single table.
+// META is the profile being played (stats, un, ship, asc) plus the settings, which are shared
+// by every profile.
 const META = { stats: {}, un: {}, ship: 'tri', asc: 0, mute: false, fx: 1, vol: 1 };
 const SAVE_KEY = 'dichotomy-1', OLD_SAVE_KEY = 'geometry-bash-1'; // the game's first name; old saves are still read
 
-function saveMeta() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(META)); } catch (e) { } }
-function loadMeta() {
-  try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem(OLD_SAVE_KEY) || 'null'); if (d) Object.assign(META, d); } catch (e) { }
-  META.stats = META.stats || {}; META.un = META.un || {};
+// ---- profiles
+// There are always NSLOTS profiles; one that has never been played is simply fresh. The first
+// lives where the only save used to, so saves from before profiles carry straight on.
+const NSLOTS = 3, CFG_KEY = 'dichotomy-cfg';
+const slotKey = i => i ? SAVE_KEY + '.' + (i + 1) : SAVE_KEY;
+let SLOT = 0;
+const LS = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { } },
+  json(k) { try { return JSON.parse(this.get(k) || 'null'); } catch (e) { return null; } }
+};
+
+// A profile rebuilt from untrusted data (a stored save or an imported file), keeping only what
+// a profile can hold. Returns null if d is not an object at all.
+function cleanProfile(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
+  const p = { stats: {}, un: {}, ship: 'tri', asc: 0 }, obj = o => o && typeof o === 'object' ? o : {};
+  for (const k of Object.keys(obj(d.stats))) if (typeof d.stats[k] === 'number' && isFinite(d.stats[k]) && d.stats[k] > 0) p.stats[k] = d.stats[k];
+  for (const k of Object.keys(obj(d.un))) if (d.un[k]) p.un[k] = true;
+  if (SHIPS.some(s => s.id === d.ship)) p.ship = d.ship;
+  p.asc = clamp(Math.floor(+d.asc) || 0, 0, 6);
   // saves from before the item-room and shop chains keep what they had
-  if (META.un.ped3) META.un.tre2 = META.un.tre3 = true;
-  if (META.un.reroll) META.un.trer = META.un.shopr = true;
-  if (META.un.shop && (META.un.ped3 || META.un.reroll)) META.un.shop2 = META.un.shop3 = true;
+  if (p.un.ped3) p.un.tre2 = p.un.tre3 = true;
+  if (p.un.reroll) p.un.trer = p.un.shopr = true;
+  if (p.un.shop && (p.un.ped3 || p.un.reroll)) p.un.shop2 = p.un.shop3 = true;
+  return p;
 }
+const freshProfile = () => cleanProfile({});
+const packProfile = p => ({ stats: p.stats, un: p.un, ship: p.ship, asc: p.asc });
+const isFresh = p => !Object.keys(p.stats).some(k => p.stats[k] > 0);
+function useProfile(p) { META.stats = p.stats; META.un = p.un; META.ship = p.ship; META.asc = p.asc; }
+// what is in a slot: the live profile for the one being played, the stored one for the others
+const slotData = i => i === SLOT ? META : (G.fakeSlots && G.fakeSlots[i]) || cleanProfile(LS.json(slotKey(i))) || freshProfile();
+
+function saveMeta() {
+  if (G.noSave) return; // the attract mode plays on a copy of the profile
+  LS.set(slotKey(SLOT), JSON.stringify(packProfile(META)));
+  LS.set(CFG_KEY, JSON.stringify({ slot: SLOT, mute: META.mute, fx: META.fx, vol: META.vol }));
+}
+function loadMeta() {
+  if (!LS.get(SAVE_KEY) && LS.get(OLD_SAVE_KEY)) LS.set(SAVE_KEY, LS.get(OLD_SAVE_KEY));
+  const cfg = LS.json(CFG_KEY) || LS.json(SAVE_KEY) || {}; // the settings used to live in the one save
+  META.mute = !!cfg.mute;
+  if (typeof cfg.fx === 'number') META.fx = clamp(cfg.fx, 0, 1);
+  if (typeof cfg.vol === 'number') META.vol = clamp(cfg.vol, 0, 1);
+  SLOT = clamp(Math.floor(+cfg.slot) || 0, 0, NSLOTS - 1);
+  useProfile(cleanProfile(LS.json(slotKey(SLOT))) || freshProfile());
+}
+function switchSlot(i) {
+  if (i === SLOT) return;
+  saveMeta();
+  const p = slotData(i);
+  SLOT = i; useProfile(p);
+  saveMeta();
+}
+// Wipes a profile for good. Its slot is left fresh.
+function deleteSlot(i) {
+  LS.del(slotKey(i));
+  if (!i) LS.del(OLD_SAVE_KEY); // or the old save would be picked up again
+  if (i === SLOT) useProfile(freshProfile());
+}
+
+// A profile leaves as a small JSON file and comes back the same way.
+function exportProfile(i) {
+  if (typeof Blob === 'undefined' || typeof URL === 'undefined') return false;
+  const a = document.createElement('a'), url = URL.createObjectURL(new Blob([JSON.stringify({ game: 'dichotomy', v: 1, profile: packProfile(slotData(i)) })], { type: 'application/json' }));
+  a.href = url; a.download = 'dichotomy-profile-' + (i + 1) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return true;
+}
+// Read a profile out of the text of a file; null if it is not one. A bare save from before
+// profiles is accepted too.
+function parseProfile(text) {
+  try {
+    const d = JSON.parse(text);
+    return cleanProfile(d && d.game === 'dichotomy' ? d.profile : d && d.stats && d.un ? d : null);
+  } catch (e) { return null; }
+}
+// Asks for a file and loads it into slot i, but only if that slot is still fresh when the file
+// arrives: importing never overwrites progress. done(ok) is called once a file has been chosen.
+function importProfile(i, done) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json';
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    if (f.size > 1 << 20) return done(false);
+    const rd = new FileReader();
+    rd.onerror = () => done(false);
+    rd.onload = () => {
+      const p = parseProfile(rd.result);
+      if (!p || !isFresh(slotData(i))) return done(false);
+      LS.set(slotKey(i), JSON.stringify(packProfile(p)));
+      if (i === SLOT) useProfile(p);
+      done(true);
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
+// how much of everything a profile has unlocked, 0 to 1
+const profFrac = p => UNLOCKS.filter(u => p.un[u.id]).length / UNLOCKS.length;
+
 const mGet = k => META.stats[k] || 0;
 function mAdd(k, n) { META.stats[k] = mGet(k) + (n === undefined ? 1 : n); }
 function mMax(k, v) { if (v > mGet(k)) META.stats[k] = v; }

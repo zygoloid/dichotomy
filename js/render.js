@@ -57,7 +57,7 @@ function drawBG(c, beat) {
     for (let i = 0; i < 16; i++) { const a = i * TAU / 16; c.moveTo(W / 2, H / 2); c.lineTo(W / 2 + Math.cos(a) * 900, H / 2 + Math.sin(a) * 900); }
   } else if (p.style === 5) {
     // water lines: they lie along the room's current and ripple downstream at the arrows' speed
-    const fl = typeof R !== 'undefined' && R && G.state !== 'title' && G.state !== 'gallery' ? R.flow : null;
+    const fl = typeof R !== 'undefined' && R && !inMenu() ? R.flow : null;
     // In still water alternate lines ripple in opposite directions, so nothing seems to flow.
     const ang = fl ? fl.ang : 0;
     c.save(); c.translate(W / 2, H / 2); c.rotate(ang);
@@ -420,7 +420,7 @@ function drawThings(c) {
   drawFurniture(c);
   for (const e of R.enemies) if (!e.strad) drawEnemy(c, e);
   drawShots(c);
-  if (G.state !== 'dead' && !R.P.strad) drawPlayer(c);
+  if (!pilotGone() && !R.P.strad) drawPlayer(c);
   drawBullets(c);
 }
 
@@ -513,7 +513,7 @@ function drawWorld(c) {
   for (const e of R.enemies) if (!e.strad) drawEnemy(c, e);
   drawBeams(c);
   drawShots(c);
-  if (G.state !== 'dead' && !P.strad) drawPlayer(c);
+  if (!pilotGone() && !P.strad) drawPlayer(c);
   drawBullets(c);
   drawLinks(c);
   if (ov) drawWormholes(c, ov);
@@ -650,7 +650,7 @@ function drawWormholes(c, ov) {
   ov.globalCompositeOperation = tc.globalCompositeOperation = 'lighter';
   for (const sh of R.shots) each(sh, sh.r * 2.6, k => drawShot(k, sh));
   ov.globalCompositeOperation = tc.globalCompositeOperation = 'source-over';
-  if (G.state !== 'dead') each(P, 34, k => drawPlayer(k));
+  if (!pilotGone()) each(P, 34, k => drawPlayer(k));
   for (const b of R.bullets) each(b, b.r + 2, k => drawBullet(k, b));
   ov.restore();
   G.ovUsed = true;
@@ -770,13 +770,116 @@ function drawToasts(c) {
 }
 
 // ---------------------------------------------------------------- screens
+function drawLogo(c, y, px) {
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '900 ' + px + 'px "Segoe UI",system-ui,sans-serif';
+  const off = Math.sin(G.t * 2) * px / 23;
+  // the name is drawn like the polarity disc: one half solid, the other half hollow
+  c.lineWidth = px / 30; c.strokeStyle = STAGES[0].pc[1]; c.strokeText('DICHOTOMY', W / 2 - off, y); c.strokeStyle = STAGES[0].pc[0]; c.strokeText('DICHOTOMY', W / 2 + off, y);
+  c.save(); c.beginPath(); c.rect(0, 0, W / 2, H); c.clip(); c.fillStyle = '#fff'; c.fillText('DICHOTOMY', W / 2, y); c.restore();
+}
+
+// A profile's emblem says how far it has got, in the game's own shapes:
+//   the frame has a side for every stage a run can now have, three to six;
+//   a second frame turns inside it once a boss has fallen;
+//   the ship in the middle is hollow until the first win, which also crowns the emblem;
+//   a red pip hangs beneath for each ascension level opened;
+//   the ring around it fills with the share of everything unlocked, and turns gold, with rays,
+//   when nothing is left.
+// A profile that has never been played is only a dotted outline.
+const ICON_FILE_OUT = 'L2,5.5,2,9,8,9,8,5.5;A5,7,5,1', ICON_FILE_IN = 'L2,5.5,2,9,8,9,8,5.5;A5,1,5,7';
+const ICON_WIPE = 'L1.5,2.6,8.5,2.6;L4,2.6,4,1.2,6,1.2,6,2.6;L2.6,2.6,3.1,9,6.9,9,7.4,2.6;L4.2,4.4,4.2,7.4;L5.8,4.4,5.8,7.4';
+function drawEmblem(c, p, x, y, s) {
+  const st = k => p.stats[k] || 0, up = -Math.PI / 2;
+  c.save(); c.lineJoin = 'round';
+  if (isFresh(p)) {
+    c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 2; c.setLineDash([3, 6]);
+    polyPath(c, x, y + s * .12, s * .8, 3, up); c.stroke(); c.setLineDash([]);
+    c.restore();
+    return;
+  }
+  const frac = profFrac(p), full = frac >= 1, col = full ? SHARD : '#ffffff';
+  const sides = 3 + (p.un.stage4 ? 1 : 0) + (p.un.stage5 ? 1 : 0) + (p.un.stage5 && p.un.stage6 ? 1 : 0), cy = sides === 3 ? y + s * .12 : y;
+  let asc = 0; while (asc < 6 && p.un['asc' + (asc + 1)]) asc++;
+  c.strokeStyle = 'rgba(255,255,255,.14)'; c.lineWidth = s * .06;
+  c.beginPath(); c.arc(x, y, s, 0, TAU); c.stroke();
+  c.strokeStyle = full ? SHARD : GOOD; c.lineCap = 'round';
+  c.beginPath(); c.arc(x, y, s, up, up + TAU * Math.max(.004, frac)); c.stroke(); c.lineCap = 'butt';
+  if (full) {
+    c.lineWidth = s * .04; c.beginPath();
+    for (let i = 0; i < 12; i++) { const a = G.t * .4 + i * TAU / 12, r0 = s * 1.1, r1 = s * (i % 2 ? 1.2 : 1.3); c.moveTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0); c.lineTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); }
+    c.stroke();
+  }
+  c.strokeStyle = col; c.lineWidth = s * .05; c.fillStyle = rgba(col, .06);
+  polyPath(c, x, cy, s * .8, sides, up); c.fill(); c.stroke();
+  if (st('bosses')) { c.strokeStyle = rgba(col, .55); c.lineWidth = s * .035; polyPath(c, x, cy, s * .52, sides, up + G.t * .5); c.stroke(); }
+  shipPath(c, p.ship, x, cy, s * .17, up);
+  if (st('wins')) { c.fillStyle = STAGES[0].pc[0]; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = s * .035; c.stroke(); }
+  else { c.fillStyle = '#000'; c.fill(); c.strokeStyle = STAGES[0].pc[0]; c.lineWidth = s * .05; c.stroke(); }
+  if (st('wins')) icon(c, MSTAT_ICON.wins, x, y - s * (full ? 1.62 : 1.38), s * .5, SHARD, 1);
+  c.fillStyle = BAD;
+  for (let i = 0; i < asc; i++) { polyPath(c, x + (i - (asc - 1) / 2) * s * .3, y + s * (full ? 1.56 : 1.32), s * .12, 3, up); c.fill(); }
+  c.restore();
+}
+
+function drawProfiles(c) {
+  drawBG(c, G.t * 2);
+  c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(0, 0, W, H);
+  const sel = G.profSel, top = PROF.y - PROF.h / 2;
+  for (let i = 0; i < NSLOTS; i++) {
+    const p = slotData(i), x = profX(i), fresh = isFresh(p), on = i === sel, msg = G.profMsg && G.profMsg.i === i ? G.profMsg : null;
+    c.fillStyle = 'rgba(255,255,255,' + (on ? .07 : .025) + ')'; c.strokeStyle = on ? '#fff' : 'rgba(255,255,255,.25)'; c.lineWidth = on ? 2.5 : 1.5;
+    if (msg) { c.strokeStyle = rgba(msg.ok ? GOOD : BAD, 1 - msg.t * .6); c.lineWidth = 4; }
+    c.beginPath(); c.roundRect(x - PROF.w / 2, top, PROF.w, PROF.h, 12); c.fill(); c.stroke();
+    // which slot this is, and a tick on the one in play
+    c.fillStyle = 'rgba(255,255,255,.7)';
+    for (let k = 0; k <= i; k++) { c.beginPath(); c.arc(x - PROF.w / 2 + 24 + k * 13, top + 24, 4, 0, TAU); c.fill(); }
+    if (i === SLOT) icon(c, 'L2,5.5,4.2,8,8.5,2.5', x + PROF.w / 2 - 26, top + 24, 22, GOOD, 1.6);
+    drawEmblem(c, p, x, PROF.y - 52, 60);
+    if (!fresh) {
+      const f = profFrac(p);
+      c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 1.5; c.strokeRect(x - 100.5, PROF.y + 68.5, 201, 9);
+      c.fillStyle = f >= 1 ? SHARD : GOOD; c.fillRect(x - 100, PROF.y + 69, 200 * f, 8);
+      [['runs', 'wins', 'bosses'], ['kills', 'rooms', 'taken']].forEach((row, j) => row.forEach((k, n) => {
+        const ix = x - 104 + n * 76, iy = PROF.y + 112 + j * 42;
+        icon(c, MSTAT_ICON[k], ix, iy, 22, 'rgba(255,255,255,.8)', 1); num(c, p.stats[k] || 0, ix + 16, iy, '#fff');
+      }));
+    }
+    if (on) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.moveTo(x - 12, top + PROF.h + 22); c.lineTo(x, top + PROF.h + 14); c.lineTo(x + 12, top + PROF.h + 22); c.stroke(); }
+  }
+  // what can be done with the selected one
+  const fresh = isFresh(slotData(sel)), y = PROF.by, hold = G.profHold / PROF.hold;
+  const btn = (k, key, w, ic, col, live) => {
+    const x = profBtn(sel, k);
+    c.globalAlpha = live ? 1 : .25;
+    keycap(c, x - 16 - (w - 26) / 2, y, key, w); icon(c, ic, x + 20, y, 24, col, 1);
+    c.globalAlpha = 1;
+  };
+  btn(0, 'SPACE', 70, MSTAT_ICON.runs, '#fff', true);
+  btn(1, fresh ? 'I' : 'E', 26, fresh ? ICON_FILE_IN : ICON_FILE_OUT, '#fff', true);
+  btn(2, 'X', 26, ICON_WIPE, BAD, !fresh);
+  if (hold > 0) { // the wipe closing in: a ring round the bin, and the card draining to red
+    const x = profBtn(sel, 2) + 20, cx = profX(sel);
+    c.strokeStyle = BAD; c.lineWidth = 3; c.beginPath(); c.arc(x, y, 21, -Math.PI / 2, -Math.PI / 2 + TAU * hold); c.stroke();
+    c.fillStyle = rgba(BAD, .28); c.beginPath(); c.roundRect(cx - PROF.w / 2, top + PROF.h * (1 - hold), PROF.w, PROF.h * hold, 12); c.fill();
+  }
+  keycap(c, 60, H - 40, 'ESC', 44);
+  c.globalAlpha = .7; keycap(c, W - 110, H - 40, 'A'); keycap(c, W - 80, H - 40, 'D'); c.globalAlpha = 1;
+}
+
+// over the attract mode, in the margins round the room: the name, and the way back
+function drawAttract(c) {
+  if (!R.enemies.some(e => e.boss)) drawLogo(c, 36, 40); // a boss's bar goes where the name is
+  if (Math.sin(G.t * 5) > -.3) { keycap(c, W - 150, H - 34, 'SPACE', 70); icon(c, MSTAT_ICON.runs, W - 94, H - 34, 22, '#fff', 1); }
+  const A = G.attract, k = Math.max(1 - A.t / ATTRACT.fade, 1 - (A.end - A.t) / ATTRACT.fade);
+  if (k > 0) { c.fillStyle = 'rgba(0,0,0,' + Math.min(1, k) + ')'; c.fillRect(0, 0, W, H); }
+}
+
 function drawTitle(c) {
   drawBG(c, G.t * 2);
-  c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '900 92px "Segoe UI",system-ui,sans-serif';
-  const off = Math.sin(G.t * 2) * 4;
-  // the name is drawn like the polarity disc: one half solid, the other half hollow
-  c.lineWidth = 3; c.strokeStyle = STAGES[0].pc[1]; c.strokeText('DICHOTOMY', W / 2 - off, 215); c.strokeStyle = STAGES[0].pc[0]; c.strokeText('DICHOTOMY', W / 2 + off, 215);
-  c.save(); c.beginPath(); c.rect(0, 0, W / 2, H); c.clip(); c.fillStyle = '#fff'; c.fillText('DICHOTOMY', W / 2, 215); c.restore();
+  drawLogo(c, 215, 92);
+  // the profile in play, top left
+  drawEmblem(c, META, TITLE_PROF.x, TITLE_PROF.y, 28);
+  c.globalAlpha = .8; keycap(c, TITLE_PROF.x, TITLE_PROF.y + 64, 'P'); c.globalAlpha = 1;
   const n = SHIPS.length;
   for (let i = 0; i < n; i++) {
     const sh = SHIPS[i], ok = sh.id === 'tri' || META.un['ship:' + sh.id], sel = i === G.shipSel, x = W / 2 + (i - (n - 1) / 2) * 120, y = 420;
@@ -913,15 +1016,17 @@ function render(c) {
   G.ovUsed = false;
   const src = [];
   let ca = .0012, pulse = 0, inv = 0;
-  if (G.state === 'title' || G.state === 'gallery') {
-    if (G.state === 'title') drawTitle(c); else drawGallery(c);
-    src.push([1, W / 2 + Math.cos(G.t * .7) * 380, 215 + Math.sin(G.t * 1.1) * 60, 70, .012]);
+  if (inMenu()) {
+    if (G.state === 'title') drawTitle(c); else if (G.state === 'gallery') drawGallery(c); else drawProfiles(c);
+    if (G.fade > 0) { c.fillStyle = 'rgba(0,0,0,' + Math.min(1, G.fade) + ')'; c.fillRect(0, 0, W, H); }
+    if (G.state !== 'profiles') src.push([1, W / 2 + Math.cos(G.t * .7) * 380, 215 + Math.sin(G.t * 1.1) * 60, 70, .012]); // nothing bends the cards
   } else {
     drawWorld(c);
     drawTeleporters(c);
     drawHUD(c);
     if (G.state === 'pause') drawPause(c);
     else if (G.state === 'dead' || G.state === 'win') drawEnd(c, G.state === 'win');
+    else if (G.attract) drawAttract(c);
     for (const w of R.wells) src.push([1, w.x, w.y, w.vis || w.r * .22, .00016 * w.str]);
     for (const o of R.orbs) src.push([1, o.x, o.y, 55, .03]);
     if (R.P.stats.repel) src.push([1, R.P.x, R.P.y, 70, -.006 * R.P.stats.repel]); // space bulges outward around the ship
@@ -936,5 +1041,5 @@ function render(c) {
   // the effects setting scales every warp; the colour-swap flash stays partly visible because it carries information
   const fx = META.fx;
   for (const s of src) s[4] *= fx;
-  return { ov: G.ovUsed, holes: R && G.state !== 'title' && G.state !== 'gallery' ? R.room.holes : [], src, ca: .0012 + (ca - .0012) * fx, pulse: pulse * fx, inv: inv * (.4 + .6 * fx), bloom: .45 + .4 * fx, vig: 1 };
+  return { ov: G.ovUsed, holes: R && !inMenu() ? R.room.holes : [], src, ca: .0012 + (ca - .0012) * fx, pulse: pulse * fx, inv: inv * (.4 + .6 * fx), bloom: .45 + .4 * fx, vig: 1 };
 }
