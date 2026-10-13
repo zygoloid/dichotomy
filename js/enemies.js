@@ -12,7 +12,7 @@ const distP = e => hyp(R.P.x - e.x, R.P.y - e.y);
 // enemy bullet
 function eb(x, y, a, spd, pol, r, o) {
   if (R.bullets.length > 900) return null;
-  const v = spd * R.bspd;
+  const v = spd * R.bspd * R.P.stats.bulletSpd;
   const b = { x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, pol, r: r || 6, t: 0, gz: false, cv: 0, noEr: false, bn: PAL.haz.bounce || 0 };
   if (o) Object.assign(b, o);
   R.bullets.push(b);
