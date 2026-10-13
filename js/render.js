@@ -373,7 +373,7 @@ function drawPlayer(c) {
   for (let i = 0; i < P.sh; i++) { c.strokeStyle = '#9fe8ff'; c.lineWidth = 2; polyPath(c, P.x, P.y, 20 + i * 4, 6, G.t); c.stroke(); }
 }
 
-// blocks, saws, switches and gates
+// blocks, saws and gates
 function drawFurniture(c) {
   const room = R.room, P = R.P;
   for (const o of room.obs) {
@@ -401,11 +401,6 @@ function drawFurniture(c) {
     c.beginPath();
     for (let i = 0; i < 16; i++) { const a = G.t * 9 + i * TAU / 16, rr = i % 2 ? sa.r * .68 : sa.r; c.lineTo(sa.x + Math.cos(a) * rr, sa.y + Math.sin(a) * rr); }
     c.closePath(); c.fillStyle = '#000'; c.fill(); c.strokeStyle = BAD; c.lineWidth = 2.5; c.stroke();
-  }
-  for (const sw of room.switches) { // half light, half dark, and it spins when struck
-    const a = G.t * (sw.cd > 0 ? 14 : 1.2);
-    for (const k of [0, 1]) { c.beginPath(); c.arc(sw.x, sw.y, 14, a + k * Math.PI, a + (k + 1) * Math.PI); c.closePath(); polFill(c, k, false, 1.5); }
-    c.strokeStyle = '#fff'; c.lineWidth = 1.5; polyPath(c, sw.x, sw.y, 21, 4, -a * .5); c.stroke();
   }
   for (const g of room.gates) {
     const col = PAL.pc[g.pol], open = g.pol === P.pol;
@@ -475,8 +470,8 @@ function drawWorld(c) {
     c.fillStyle = '#000'; c.beginPath(); c.arc(w.x, w.y, w.core + 6, 0, TAU); c.fill();
     c.strokeStyle = PAL.wall; c.lineWidth = 2;
     for (let i = 0; i < 4; i++) {
-      const r = w.core + 8 + ((i * 60 + 240 - (G.t * 50) % 60) % 240);
-      c.globalAlpha = .6 * (1 - r / 260); c.beginPath(); c.arc(w.x, w.y, r, 0, TAU); c.stroke();
+      const d = (i * 60 + 240 - (G.t * 50) % 60) % 240, r = w.core + 8 + d; // a ring is born faint at the rim and brightens on the way in
+      c.globalAlpha = .6 * (1 - d / 240); c.beginPath(); c.arc(w.x, w.y, r, 0, TAU); c.stroke();
     }
     c.globalAlpha = 1;
   }

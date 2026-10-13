@@ -64,7 +64,7 @@ function genWaves(stage, depth, chasersOnly) {
 // A room's obs are solid rectangles; flags give them behaviour:
 //   mv {ax,ay,bx,by,per,ph}  slides back and forth      hot    hurts the pilot on touch
 //   burst                    only a burst breaks it      crate  may drop a pickup when broken
-// Alongside them: gates (solid to the other colour), switches (shoot to swap every gate's colour),
+// Alongside them: gates (solid to the other colour),
 // saws (travelling hazards), holes (wormhole pairs) and wraps (linked stretches of the side walls).
 const LAYOUTS = [['open', 2], ['pillars', 3], ['block', 1], ['bars', 2], ['sym', 3],
   ['maze', 3, 'rm:maze'], ['movers', 3, 'rm:movers'], ['danger', 3, 'rm:danger'], ['polar', 3, 'rm:polar'], ['vault', 3, 'rm:vault']];
@@ -159,11 +159,10 @@ function genDanger(r) {
 }
 
 // Coloured walls with a purpose. A fort: four walls round the middle, open at the corners, that
-// shield whoever is inside from one colour on two sides, with the switch that swaps the colours
-// in the centre. Or treasure cells: two corner chambers closed by walls of different colours.
+// shield whoever is inside from one colour on two sides. Or treasure cells: two corner chambers
+// closed by walls of different colours, whose loot stays put until its wall lets the pilot through.
 function genPolar(r) {
   const a = randi(0, 1), gate = (x, y, w, h, pol) => r.gates.push(rc(x, y, w, h, { pol }));
-  r.switches.push({ x: CX, y: CY, cd: 0 });
   if (chance(.5)) {
     gate(0, -120, 260, 14, a); gate(0, 120, 260, 14, a); gate(-170, 0, 14, 180, a ^ 1); gate(170, 0, 14, 180, a ^ 1);
     r.obs = mirrored([[400, 200, 50, 50]], 'hv');
@@ -171,16 +170,17 @@ function genPolar(r) {
     const top = chance(.5);
     for (const left of [true, false]) {
       const ch = chamber(r, left, left ? top : !top), pol = left ? a : a ^ 1;
-      r.gates.push(Object.assign(ch.door, { pol }));
-      for (let i = 0, n = randi(3, 4); i < n; i++) r.pickups.push({ x: ch.x + ch.w / 2 + rand(-40, 40), y: ch.y + ch.h / 2 + rand(-26, 26), kind: 'shard', t: 0 });
-      if (chance(.35)) r.pickups.push({ x: ch.x + ch.w / 2, y: ch.y + ch.h / 2, kind: chance(.5) ? 'cell' : 'heart', t: 0 });
+      const door = Object.assign(ch.door, { pol });
+      r.gates.push(door);
+      for (let i = 0, n = randi(3, 4); i < n; i++) r.pickups.push({ x: ch.x + ch.w / 2 + rand(-40, 40), y: ch.y + ch.h / 2 + rand(-26, 26), kind: 'shard', t: 0, lock: door });
+      if (chance(.35)) r.pickups.push({ x: ch.x + ch.w / 2, y: ch.y + ch.h / 2, kind: chance(.5) ? 'cell' : 'heart', t: 0, lock: door });
     }
-    gate(-150, 0, 56, 56, a); gate(150, 0, 56, 56, a ^ 1); // a coloured post either side of the switch
+    gate(-150, 0, 56, 56, a); gate(150, 0, 56, 56, a ^ 1); // a coloured post either side of the middle
   }
 }
 
 // Mazes. Plain: a spanning tree over an 8x5 grid with a few extra walls knocked out so it loops.
-// Polar: the same, but a share of the walls are coloured gates, with a switch in the middle.
+// Polar: the same, but a share of the walls are coloured gates.
 // Split: a coarser maze cut in two by an unbroken wall, with one end of a wormhole in a dead
 // end on each side, so the wormhole is the only way across.
 function genMaze(r) {
@@ -210,7 +210,6 @@ function genMaze(r) {
     if (c < C - 1 && V[c][q]) wall({ x: BX0 + (c + 1) * cw - T / 2, y: BY0 + q * ch, w: T, h: ch }, c + q);
     if (q < Q - 1 && Hz[c][q]) wall({ x: BX0 + c * cw, y: BY0 + (q + 1) * ch - T / 2, w: cw, h: T }, c + q + 1);
   }
-  if (polar) r.switches.push({ x: BX0 + (C / 2 + .5) * cw, y: BY0 + (Q / 2) * ch, cd: 0 });
   if (split) {
     const open = (c, q) => (c > 0 && !V[c - 1][q]) + (c < C - 1 && !V[c][q]) + (q > 0 && !Hz[c][q - 1]) + (q < Q - 1 && !Hz[c][q]);
     const atDoor = (c, q) => ((c === C / 2 - 1 || c === C / 2) && (q === 0 || q === Q - 1)) || ((c === 0 || c === C - 1) && (q === Q / 2 - 1 || q === Q / 2));
@@ -304,7 +303,7 @@ function genWells(n) {
 function genFloor(stage) {
   const rooms = [], map = {}, key = (x, y) => x + ',' + y, dirs = Object.values(DIRV);
   const add = (x, y, type) => {
-    const r = { gx: x, gy: y, type, doors: {}, cleared: false, visited: false, seen: false, obs: [], gates: [], wells: [], fields: [], flow: null, switches: [], saws: [], holes: [], wraps: [], noSpawn: [], navB: null, layout: 'open', rich: false, hidden: null, mb: null, waves: [], peds: [], pickups: [], portal: null, depth: 0 };
+    const r = { gx: x, gy: y, type, doors: {}, cleared: false, visited: false, seen: false, obs: [], gates: [], wells: [], fields: [], flow: null, saws: [], holes: [], wraps: [], noSpawn: [], navB: null, layout: 'open', rich: false, hidden: null, mb: null, waves: [], peds: [], pickups: [], portal: null, depth: 0 };
     rooms.push(r); map[key(x, y)] = r; return r;
   };
   const nb = (x, y) => dirs.filter(d => map[key(x + d[0], y + d[1])]).length;

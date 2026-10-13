@@ -133,13 +133,12 @@ function breakBlock(o) {
   }
 }
 
-// moving blocks, saws and switch cooldowns
+// moving blocks and saws
 function updateFurniture(dt) {
   const room = R.room, P = R.P;
   const at = m => .5 - .5 * Math.cos((R.time / m.per + m.ph) * TAU);
   for (const o of room.obs) if (o.mv) { const k = at(o.mv); o.x = lerp(o.mv.ax, o.mv.bx, k); o.y = lerp(o.mv.ay, o.mv.by, k); }
   for (const h of room.holes) if (h.mv) { const k = at(h.mv); h.x = lerp(h.mv.ax, h.mv.bx, k); h.y = lerp(h.mv.ay, h.mv.by, k); } // drifting wormholes
-  for (const sw of room.switches) if (sw.cd > 0) sw.cd -= dt;
   if (P.doorT > 0) P.doorT -= dt;
   for (const sa of room.saws) {
     const k = at(sa); sa.x = lerp(sa.ax, sa.bx, k); sa.y = lerp(sa.ay, sa.by, k);
@@ -488,7 +487,10 @@ function updatePickups(dt) {
   const P = R.P, s = P.stats, list = R.pickups, obs = R.room.obs;
   for (let i = list.length - 1; i >= 0; i--) {
     const p = list[i]; p.t += dt;
-    if (p.lock) { if (obs.includes(p.lock)) continue; p.lock = null; } // sealed in a vault
+    if (p.lock) { // sealed in: behind a vault door until it is broken, or behind a gate while it is shut to the pilot
+      if (p.lock.pol === undefined ? obs.includes(p.lock) : p.lock.pol !== P.pol) continue;
+      if (p.lock.pol === undefined) p.lock = null;
+    }
     if (p.tu) { tubeStep(p, dt); continue; }
     if (p.vx) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .9; p.vy *= .9; }
     if (!(p.kind === 'heart' && P.hp >= s.maxHp)) {

@@ -334,11 +334,6 @@ function stepShot(sh, dt, scan) {
   for (const fd of R.room.fields) if ((sh.x - fd.x) * (sh.x - fd.x) + (sh.y - fd.y) * (sh.y - fd.y) < fd.r * fd.r) sh.pol = fd.pol;
   if (R.flow) { sh.x += R.flow.x * 80 * dt; sh.y += R.flow.y * 80 * dt; }
   teleport(sh);
-  for (const sw of R.room.switches) if (sw.cd <= 0 && hyp(sw.x - sh.x, sw.y - sh.y) < 16 + sh.r) { // a hit swaps every gate's colour
-    sw.cd = .5; for (const g of R.room.gates) g.pol ^= 1;
-    fxRing(sw.x, sw.y, .03, 500, .4); AU.sfx('swap');
-    if (sh.pierce > 0) sh.pierce--; else { killShot(sh); return; }
-  }
   // walls and blocks
   let nx = 0, ny = 0;
   if (sh.x < BX0) { nx = 1; sh.x = BX0; } else if (sh.x > BX1) { nx = -1; sh.x = BX1; }
