@@ -81,7 +81,7 @@ UL('alt3', 'stage', 'bosses', 10, 'L1,8,4,8;A4,8,9,4;A4,8,9,9.4;D2,3,.8;D4.2,3,.
 UL('stage6', 'stage', 'wins', 3, 'L1,9,1,7,4,7,4,5,7,5,7,3,9,3;D5,1.2,.8;D7,1.2,.8;D9,1.2,.8');
 UL('rm:maze', 'room', 'rooms', 10, 'P1,1,9,1,9,9,1,9;L1,4,6,4;L4,7,9,7;L6,4,6,7');
 UL('rm:vault', 'room', 'bursts', 8, 'P1,2,9,2,9,8,1,8;D5,5,1.3;L5,2,5,3.5;L5,6.5,5,8');
-UL('rm:movers', 'room', 'rooms', 25, 'P2,3,6,3,6,7,2,7;A6.5,5,9.5,5');
+UL('rm:movers', 'room', 'rooms', 25, 'P1.4,3,5.4,3,5.4,7,1.4,7;L7.82,3.35,9.47,5,7.82,6.65;L5.73,3.35,7.38,5,5.73,6.65');
 UL('rm:polar', 'room', 'flips', 60, 'P1,2,4.5,2,4.5,8,1,8;F5.5,2,9,2,9,8,5.5,8');
 UL('rm:danger', 'room', 'rooms', 40, 'P3,3,7,3,7,7,3,7;L5,3,5,.8;L5,7,5,9.2;L3,5,.8,5;L7,5,9.2,5');
 UL('tele:hole', 'room', 'lattice', 1, // reaching the Lattice floor, where they are at home
