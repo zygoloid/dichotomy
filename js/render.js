@@ -503,7 +503,13 @@ function drawWorld(c) {
     for (let i = 0; i < 3; i++) { c.globalAlpha = .7 - i * .2; c.beginPath(); c.ellipse(o.x, o.y, 22 + i * 12, 9 + i * 5, G.t * 3 * (i % 2 ? -1 : 1) + i, 0, TAU); c.stroke(); }
     c.globalAlpha = 1;
   }
-  for (const m of R.mines) { polyPath(c, m.x, m.y, 7, 4, 0); polFill(c, R.P.pol, m.t > .4 && Math.sin(m.t * 14) > .6, 1.5); }
+  for (const m of R.mines) { // a round body with four spikes; never a diamond, which would read as a shard
+    const fl = m.t > .4 && Math.sin(m.t * 14) > .6;
+    c.strokeStyle = fl ? '#fff' : PAL.pc[R.P.pol]; c.lineWidth = 2; c.beginPath();
+    for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + k * Math.PI / 2; c.moveTo(m.x + Math.cos(a) * 5, m.y + Math.sin(a) * 5); c.lineTo(m.x + Math.cos(a) * 9.5, m.y + Math.sin(a) * 9.5); }
+    c.stroke();
+    c.beginPath(); c.arc(m.x, m.y, 5, 0, TAU); polFill(c, R.P.pol, fl, 1.5);
+  }
   for (const e of R.enemies) if (!e.strad) drawEnemy(c, e);
   drawBeams(c);
   drawShots(c);
@@ -716,9 +722,9 @@ function drawHUD(c) {
   if (P.chain > 0) num(c, '×' + P.chain, bw + 78, 48, SHARD);
   // shards
   c.fillStyle = SHARD; polyPath(c, 28, 72 + (s.rings - 1) * 9, 7, 4, 0); c.fill(); num(c, P.shards, 42, 72 + (s.rings - 1) * 9, SHARD);
-  // stage pips
+  // stages, as the segments of a bar
   for (let i = 0; i < R.nStages; i++) {
-    polyPath(c, 960 + i * 18, 24, 6, 4, 0);
+    c.beginPath(); c.rect(953.5 + i * 18, 20.5, 14, 8);
     if (i < R.stage) { c.fillStyle = 'rgba(255,255,255,.5)'; c.fill(); }
     else if (i === R.stage) { c.fillStyle = PAL.wall; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
     else { c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 1; c.stroke(); }
