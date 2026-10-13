@@ -153,7 +153,7 @@ function newRun() {
   R = {
     ship, asc: Math.min(META.asc || 0, maxAsc()), stage: 0, time: 0, beat: 0, lastStep: -1, slowT: 0,
     shots: [], bullets: [], enemies: [], pickups: [], parts: [], fx: [], arcs: [], booms: [], wells: [], mines: [], trails: [], orbs: [], slashes: [], webs: [], bossMax: 1,
-    offered: new Set(), killCam: 0, rerollCost: 3,
+    offered: new Set(), killCam: 0, rerollCost: 3, temper: [], lostFx: [],
     shake: 0, inv: 0, ca: 0, flash: 0, eid: 0, shotN: 0, wave: 0, flipRule: false, lastFlipBeat: 0, over: false,
     nStages: 3 + (META.un.stage4 ? 1 : 0) + (META.un.stage5 ? 1 : 0) + (META.un.stage5 && META.un.stage6 ? 1 : 0),
     route: rollRoute(), flow: null, flowD: 0, line: null,
@@ -255,7 +255,7 @@ function clearRoom() {
     R.pickups.push({ x: W / 2, y: H / 2, kind: 'heart', t: 0 });
   } else {
     const r = Math.random();
-    if (r < .2 + .04 * s.luck && P.hp < s.maxHp) R.pickups.push({ x: W / 2, y: H / 2, kind: 'heart', t: 0 });
+    if (r < .2 + .04 * s.luck + s.hearts && P.hp < s.maxHp) R.pickups.push({ x: W / 2, y: H / 2, kind: 'heart', t: 0 });
     else if (r < .4) dropShards(W / 2, H / 2, 1);
   }
   toast(checkUnlocks());
@@ -266,6 +266,7 @@ function nextStage() {
   AU.sfx('warp');
   if (R.stage + 1 >= R.nStages) {
     mAdd('wins'); mMax('asc', R.asc + 1);
+    if (!G.attract) for (const id of R.temper) META.lv[id] = upLv(id) + 1; // the stake pays out
     endRun('win');
   } else {
     startStage(R.stage + 1);
@@ -289,6 +290,7 @@ function giveUp(id) {
   for (const [f, a, b] of FUSIONS) if (P.fus[f] && !had[f]) G.toasts.push({ f: [a, b], t: 0 });
   const after = P.stats.maxHp;
   if (after > before) P.hp += after - before;
+  if (id === 'hp' && P.stats.hpHeal) P.hp = after;
   P.hp = clamp(P.hp, 1, after);
   P.charge = Math.min(P.charge, chargeCap());
   mAdd('taken');
@@ -311,7 +313,7 @@ function hurtPlayer() {
   mAdd('hits');
   R.ca = .03; R.flash = 1; fxShake(16); G.hitstop = .07; fxRing(P.x, P.y, .1, 800, .7); AU.sfx('hurt');
   for (const b of R.bullets) if (hyp(b.x - P.x, b.y - P.y) < 150) { b.dead = true; fxParts(b.x, b.y, PAL.pc[b.pol], 1, 120); }
-  if (s.thorns) for (let i = 0, n = 16 * s.thorns; i < n; i++) spawnShot(P.x, P.y, i * TAU / n, { dmg: shotDmg() * 1.5, pol: P.pol });
+  if (s.thorns) for (let i = 0, n = 16 * s.thorns + s.thornsN; i < n; i++) spawnShot(P.x, P.y, i * TAU / n, { dmg: shotDmg() * 1.5, pol: P.pol });
   if (P.hp <= 0) {
     fxParts(P.x, P.y, PAL.pc[P.pol], 80, 500); fxRing(P.x, P.y, .2, 600, 1.5); R.inv = 1; AU.sfx('boom');
     endRun('dead');
@@ -324,7 +326,7 @@ function flipPolarity() {
   P.pol ^= 1; P.lockT = s.flipLock;
   R.st.flips = (R.st.flips || 0) + 1; mAdd('flips');
   AU.sfx('flip', P.pol); fxRing(P.x, P.y, .018, 420, .3);
-  if (s.fcrit) P.fcN = 3 * s.fcrit;
+  if (s.fcrit) P.fcN = 3 * s.fcrit + s.fcritN;
   if (s.fblink && P.blinkCd <= 0) {
     // phase step: a short hop in the direction of travel, untouchable for a moment
     const v = hyp(P.vx, P.vy);
@@ -335,7 +337,7 @@ function flipPolarity() {
   }
   if (s.nova && P.novaCd <= 0) {
     P.novaCd = 1.5;
-    for (let i = 0, n = 8 * s.nova; i < n; i++) spawnShot(P.x, P.y, P.ang + i * TAU / n, { dmg: shotDmg() * .6, pol: P.pol });
+    for (let i = 0, n = 8 * s.nova + s.novaN; i < n; i++) spawnShot(P.x, P.y, P.ang + i * TAU / n, { dmg: shotDmg() * .6, pol: P.pol });
   }
   if (P.fus.halo) for (let i = 0; i < s.orbit; i++) { const a = R.time * 2.6 + i * TAU / s.orbit; spawnShot(P.x + Math.cos(a) * 48, P.y + Math.sin(a) * 48, a, { dmg: shotDmg(), pol: P.pol }); }
   if (s.flipSlow) R.slowT = Math.max(R.slowT, s.flipSlow);
@@ -512,6 +514,7 @@ function updatePickups(dt) {
 function takePed(p) {
   const P = R.P, room = R.room;
   if (p.reroll) return rerollRoom();
+  if (p.temper) return sacrifice(p);
   if (P.shards < p.price || (p.heart && P.hp >= P.stats.maxHp) || (p.hpCost && computeStats(R.ship, P.ups).maxHp <= 1)) { AU.sfx('deny'); return; }
   P.shards -= p.price; p.taken = true;
   if (p.hpCost) { P.ups.push('scar'); AU.sfx('hurt'); fxShake(10); R.flash = 1; }
@@ -519,6 +522,27 @@ function takePed(p) {
   if (room.type === 'treasure') mAdd('tItems'); else if (room.type === 'shop') mAdd('sItems'); // these grow the rooms (see meta.js)
   if (p.group) for (const q of room.peds) if (q.group === p.group && !q.taken) { q.taken = true; fxParts(q.x, q.y, '#888888', 12, 200); }
   if (room.type === 'challenge' && !room.done) { room.done = true; room.cleared = false; R.wave = 0; spawnWave(room.waves[0]); AU.sfx('warp'); fxShake(10); }
+}
+
+// ---- tempering
+// The antechamber before a run's last boss holds one pedestal. Each use takes an upgrade out of
+// the build, chosen at random, and holds it as a stake. Win the run and every upgrade staked
+// gains a level for good (see LEVELS in upgrades.js); lose it and none do. The upgrades are gone
+// for the fight either way, so each one staked makes losing the lot more likely.
+// What can be staked: anything not yet at the highest level this run's ascension can earn, once.
+function temperable() {
+  const cap = lvCap(R.asc);
+  return R.P.ups.filter(id => upLv(id) < Math.min(upMax(id), cap) && !R.temper.includes(id));
+}
+function sacrifice(p) {
+  const P = R.P, list = temperable();
+  if (!list.length) { AU.sfx('deny'); return; }
+  const id = pick(list); // a build with two of something is twice as likely to lose one of them
+  P.ups.splice(P.ups.indexOf(id), 1); R.temper.push(id);
+  recompute();
+  P.hp = clamp(P.hp, 1, P.stats.maxHp); P.sh = Math.min(P.sh, P.stats.shield); P.charge = Math.min(P.charge, chargeCap());
+  R.lostFx.push({ id, x: p.x, y: p.y, t: 0 });
+  AU.sfx('swap'); fxShake(8); fxRing(p.x, p.y, .05, 500, .5); fxParts(p.x, p.y, TIER_COL[UP[id].tier], 24, 300);
 }
 
 // what a room's reroll pedestal would replace: every upgrade still on offer there
@@ -570,6 +594,7 @@ function updateFx(dt) {
   for (let i = R.booms.length - 1; i >= 0; i--) if ((R.booms[i].t += dt) > .25) R.booms.splice(i, 1);
   for (let i = R.slashes.length - 1; i >= 0; i--) if ((R.slashes[i].t += dt) > .16) R.slashes.splice(i, 1);
   for (let i = R.trails.length - 1; i >= 0; i--) if ((R.trails[i].t += dt) > .14) R.trails.splice(i, 1);
+  for (let i = R.lostFx.length - 1; i >= 0; i--) if ((R.lostFx[i].t += dt) > 1) R.lostFx.splice(i, 1);
   R.shake *= Math.exp(-dt * 9);
   R.inv = Math.max(0, R.inv - dt * 3);
   R.flash = Math.max(0, R.flash - dt * 4);

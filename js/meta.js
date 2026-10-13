@@ -1,9 +1,9 @@
 'use strict';
 // Persistent progression. Everything unlockable is one row in UNLOCKS, gated on a
 // lifetime counter, so the gallery and the unlock checks share a single table.
-// META is the profile being played (stats, un, ship, asc) plus the settings, which are shared
-// by every profile.
-const META = { stats: {}, un: {}, ship: 'tri', asc: 0, mute: false, fx: 1, vol: 1 };
+// META is the profile being played (stats, un, ship, asc, and lv: the levels its upgrades have
+// been tempered to) plus the settings, which are shared by every profile.
+const META = { stats: {}, un: {}, ship: 'tri', asc: 0, lv: {}, mute: false, fx: 1, vol: 1 };
 const SAVE_KEY = 'dichotomy-1', OLD_SAVE_KEY = 'geometry-bash-1'; // the game's first name; old saves are still read
 
 // ---- profiles
@@ -23,11 +23,12 @@ const LS = {
 // a profile can hold. Returns null if d is not an object at all.
 function cleanProfile(d) {
   if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
-  const p = { stats: {}, un: {}, ship: 'tri', asc: 0 }, obj = o => o && typeof o === 'object' ? o : {};
+  const p = { stats: {}, un: {}, ship: 'tri', asc: 0, lv: {} }, obj = o => o && typeof o === 'object' ? o : {};
   for (const k of Object.keys(obj(d.stats))) if (typeof d.stats[k] === 'number' && isFinite(d.stats[k]) && d.stats[k] > 0) p.stats[k] = d.stats[k];
   for (const k of Object.keys(obj(d.un))) if (d.un[k]) p.un[k] = true;
   if (SHIPS.some(s => s.id === d.ship)) p.ship = d.ship;
   p.asc = clamp(Math.floor(+d.asc) || 0, 0, 6);
+  for (const k of Object.keys(obj(d.lv))) if (UP[k]) { const v = clamp(Math.floor(+d.lv[k]) || 0, 0, upMax(k)); if (v) p.lv[k] = v; }
   // saves from before the item-room and shop chains keep what they had
   if (p.un.ped3) p.un.tre2 = p.un.tre3 = true;
   if (p.un.reroll) p.un.trer = p.un.shopr = true;
@@ -35,9 +36,9 @@ function cleanProfile(d) {
   return p;
 }
 const freshProfile = () => cleanProfile({});
-const packProfile = p => ({ stats: p.stats, un: p.un, ship: p.ship, asc: p.asc });
+const packProfile = p => ({ stats: p.stats, un: p.un, ship: p.ship, asc: p.asc, lv: p.lv });
 const isFresh = p => !Object.keys(p.stats).some(k => p.stats[k] > 0);
-function useProfile(p) { META.stats = p.stats; META.un = p.un; META.ship = p.ship; META.asc = p.asc; }
+function useProfile(p) { META.stats = p.stats; META.un = p.un; META.ship = p.ship; META.asc = p.asc; META.lv = p.lv; }
 // what is in a slot: the live profile for the one being played, the stored one for the others
 const slotData = i => i === SLOT ? META : (G.fakeSlots && G.fakeSlots[i]) || cleanProfile(LS.json(slotKey(i))) || freshProfile();
 
@@ -110,6 +111,8 @@ function importProfile(i, done) {
 }
 // how much of everything a profile has unlocked, 0 to 1
 const profFrac = p => UNLOCKS.filter(u => p.un[u.id]).length / UNLOCKS.length;
+// and how far its upgrades have been tempered, 0 to 1
+const tempFrac = p => UPS.reduce((a, u) => a + Math.min(p.lv[u.id] || 0, upMax(u.id)), 0) / UPS.reduce((a, u) => a + upMax(u.id), 0);
 
 const mGet = k => META.stats[k] || 0;
 function mAdd(k, n) { META.stats[k] = mGet(k) + (n === undefined ? 1 : n); }

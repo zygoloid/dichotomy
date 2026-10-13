@@ -1,5 +1,17 @@
 'use strict';
-const GOOD = '#7dffb0', BAD = '#ff5468', HEART = '#ff5a7a', SHARD = '#ffd84a';
+const GOOD = '#7dffb0', BAD = '#ff5468', HEART = '#ff5a7a', SHARD = '#ffd84a', TEMPER = '#6fd8ff';
+// the colour of each kind of room, on its door and on the map
+const ROOM_COL = { boss: BAD, treasure: SHARD, shop: GOOD, challenge: '#b98cff', altar: HEART, mini: '#ff8a3d', secret: '#ffffff', ante: TEMPER };
+// Tempering is drawn as rising bars: three of them for the pedestal, and one small bar at the
+// corner of an upgrade's icon for each level it has.
+const LV_BARS = ['L2.5,8,2.5,6', 'L5,8,5,4', 'L7.5,8,7.5,2'];
+function drawLv(c, id, x, y, s) {
+  const n = upLv(id);
+  if (!n) return;
+  const w = Math.max(2, s * .08), h = Math.max(5, s * .24);
+  c.fillStyle = TEMPER;
+  for (let i = 0; i < n; i++) c.fillRect(x + s / 2 - w - i * (w + 1.5) + 2, y - s / 2 - 2, w, h);
+}
 const FONT = 'bold 15px "Segoe UI",system-ui,sans-serif';
 
 // light = solid with white edge, dark = hollow ring; shape language, not just hue
@@ -111,7 +123,6 @@ function drawRoomFrame(c) {
   };
   side(BX0, BY0, BX1, BY0, 'n'); vwall(BX1, 'e'); side(BX0, BY1, BX1, BY1, 's'); vwall(BX0, 'w');
   c.stroke();
-  const TC = { boss: BAD, treasure: SHARD, shop: GOOD, challenge: '#b98cff', altar: HEART, mini: '#ff8a3d', secret: '#ffffff' };
   if (room.hidden) {
     // hairline cracks where a secret door can be shot open
     const [x, y] = DOOR_POS[room.hidden.dir], v = DIRV[room.hidden.dir], hot = G.t - room.hidden.flT < .15;
@@ -122,7 +133,7 @@ function drawRoomFrame(c) {
     c.restore();
   }
   for (const d in D) {
-    const [x, y] = DOOR_POS[d], v = DIRV[d], t = D[d], col = TC[t.type] || '#ffffff';
+    const [x, y] = DOOR_POS[d], v = DIRV[d], t = D[d], col = ROOM_COL[t.type] || '#ffffff';
     c.save(); c.translate(x, y); c.rotate(Math.atan2(v[1], v[0]));
     if (!open) { c.strokeStyle = PAL.wall; c.lineWidth = 7; c.beginPath(); c.moveTo(0, -g); c.lineTo(0, g); c.stroke(); }
     else {
@@ -289,11 +300,17 @@ function drawPed(c, p, near) {
     const live = rerollable().length > 0;
     c.strokeStyle = live ? '#fff' : 'rgba(255,255,255,.3)'; c.lineWidth = 2; polyPath(c, p.x, y, s * .8, 8, G.t * .5); c.stroke();
     icon(c, 'R5,5,3.3,40,330;A7.6,2.2,8.3,4.6', p.x, y, s * .8, live ? '#fff' : 'rgba(255,255,255,.3)', 1);
+  } else if (p.temper) { // as many bars lit as levels this run can reach; all dim when nothing is left to stake
+    const live = temperable().length > 0, cap = lvCap(R.asc);
+    c.strokeStyle = rgba(TEMPER, live ? .8 : .3); c.lineWidth = 2; c.fillStyle = rgba(TEMPER, live ? .1 : 0);
+    polyPath(c, p.x, y, s * .85, 5, -Math.PI / 2 + G.t * .5); c.fill(); c.stroke();
+    LV_BARS.forEach((b, i) => icon(c, b, p.x, y, s * .8, live && i < cap ? TEMPER : rgba(TEMPER, .3), 1.3));
   } else {
     const u = UP[p.up], col = TIER_COL[u.tier];
     c.strokeStyle = rgba(col, .8); c.lineWidth = 2; c.fillStyle = rgba(col, .1);
     polyPath(c, p.x, y, s * .85, TIER_SIDES[u.tier], u.tier === 3 ? Math.PI / 2 : G.t * .5); c.fill(); c.stroke();
     icon(c, u.icon, p.x, y, s * (u.tier === 3 ? .62 : .8), col, 1);
+    drawLv(c, p.up, p.x, y, s * .8);
   }
   if (p.hpCost) icon(c, UP.scar.icon, p.x, p.y + 54, 22, HEART, 1.2);
   const price = p.reroll ? R.rerollCost : p.price; // the reroll's price is the run's, not the pedestal's
@@ -303,7 +320,7 @@ function drawPed(c, p, near) {
   }
   if (!near) return;
   keycap(c, p.x, p.y + (price || p.hpCost ? 82 : 58), 'E');
-  if (p.heart || p.reroll) return;
+  if (p.heart || p.reroll || p.temper) return;
   const dl = statDeltas(computeStats(R.ship, P.ups), P.stats);
   let x = p.x - (dl.length - 1) * 21;
   for (const d of dl) {
@@ -343,7 +360,7 @@ function drawPlayer(c) {
     c.stroke();
   }
   if (P.rageT > 0) { c.strokeStyle = rgba(BAD, .5 + .3 * Math.sin(G.t * 20)); c.lineWidth = 2; polyPath(c, P.x, P.y, 22, 3, G.t * 5); c.stroke(); }
-  if (P.fcN > 0) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 17, 0, TAU * P.fcN / (3 * s.fcrit)); c.stroke(); }
+  if (P.fcN > 0) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 17, 0, TAU * P.fcN / (3 * s.fcrit + s.fcritN)); c.stroke(); }
   if (s.chargeshot && P.cs > .05) { // the charge gathering at the nose
     c.fillStyle = rgba(col, .35 + .5 * P.cs); c.beginPath(); c.arc(P.x + Math.cos(P.face) * 18, P.y + Math.sin(P.face) * 18, 3 + 7 * P.cs, 0, TAU); c.fill();
     if (P.cs >= 1) { c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
@@ -485,6 +502,10 @@ function drawWorld(c) {
     }
   }
   for (const p of room.peds) if (!p.taken) drawPed(c, p, p === R.nearPed);
+  for (const f of R.lostFx) { // an upgrade just staked lifts off the pedestal and fades
+    const u = UP[f.id];
+    c.globalAlpha = 1 - f.t; icon(c, u.icon, f.x, f.y - 20 - 70 * f.t, 34, TIER_COL[u.tier], 1); c.globalAlpha = 1;
+  }
   for (const p of R.pickups) {
     if (p.kind === 'shard') {
       c.fillStyle = SHARD; polyPath(c, p.x, p.y, 6, 4, G.t * 4 + p.x); c.fill();
@@ -663,6 +684,7 @@ function drawUpRow(c, ups, x0, y, s, maxW) {
   for (const [id, n] of upCounts(ups)) {
     const u = UP[id];
     icon(c, u.icon, x, yy, s, TIER_COL[u.tier], 1);
+    drawLv(c, id, x, yy, s);
     c.fillStyle = TIER_COL[u.tier];
     for (let i = 1; i < n && i < 6; i++) c.fillRect(x - s / 2 + (i - 1) * 4, yy + s / 2 + 2, 2.5, 2.5);
     x += s + 8;
@@ -671,10 +693,11 @@ function drawUpRow(c, ups, x0, y, s, maxW) {
 }
 
 function drawMinimap(c) {
-  const cx = W - 130, cy = 34, cur = R.room, TC = { boss: BAD, treasure: SHARD, shop: GOOD, challenge: '#b98cff', altar: HEART, mini: '#ff8a3d', secret: '#ffffff' };
+  const cx = W - 130, cy = 34, cur = R.room, TC = ROOM_COL, map = R.P.stats.map;
   // keep the map on the wall strip: scale so the floor's extent fits
   let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
-  const vis = R.floor.rooms.filter(r => r.seen || (R.P.stats.map && TC[r.type] && r.type !== 'secret'));
+  // the compass shows the boss and the item rooms; tempered, every special room, and then the secret ones too
+  const vis = R.floor.rooms.filter(r => r.seen || (map && (r.type === 'boss' || r.type === 'treasure')) || (map >= 2 && TC[r.type] && (map >= 3 || r.type !== 'secret')));
   for (const r of vis) { x0 = Math.min(x0, r.gx); x1 = Math.max(x1, r.gx); y0 = Math.min(y0, r.gy); y1 = Math.max(y1, r.gy); }
   const cw = 15, ch = 9, ox = cx - (x0 + x1) / 2 * (cw + 3), oy = cy - (y0 + y1) / 2 * (ch + 3);
   c.save();
@@ -727,6 +750,11 @@ function drawHUD(c) {
   for (let i = 0; i < R.asc; i++) { c.fillStyle = BAD; polyPath(c, 960 + i * 12, 44, 5, 3, -Math.PI / 2); c.fill(); }
   drawMinimap(c);
   drawUpRow(c, P.ups, 30, H - 34, 22, 960);
+  // what has been staked on the last boss, down the left margin
+  if (R.temper.length) {
+    LV_BARS.forEach(b => icon(c, b, 34, 118, 20, TEMPER, 1.3));
+    R.temper.forEach((id, i) => icon(c, UP[id].icon, (R.temper.length > 17 ? 20 : 34) + Math.floor(i / 17) * 28, 148 + (i % 17) * 28, 22, TIER_COL[UP[id].tier], 1));
+  }
   // boss bar
   const bosses = R.enemies.filter(e => e.boss);
   if (bosses.length) {
@@ -806,6 +834,8 @@ function drawEmblem(c, p, x, y, s) {
   }
   c.strokeStyle = col; c.lineWidth = s * .05; c.fillStyle = rgba(col, .06);
   polyPath(c, x, cy, s * .8, sides, up); c.fill(); c.stroke();
+  const tf = tempFrac(p); // tempering: a thin arc just inside the ring
+  if (tf > 0) { c.strokeStyle = TEMPER; c.lineWidth = s * .03; c.beginPath(); c.arc(x, y, s * .91, up, up + TAU * tf); c.stroke(); }
   if (st('bosses')) { c.strokeStyle = rgba(col, .55); c.lineWidth = s * .035; polyPath(c, x, cy, s * .52, sides, up + G.t * .5); c.stroke(); }
   shipPath(c, p.ship, x, cy, s * .17, up);
   if (st('wins')) { c.fillStyle = STAGES[0].pc[0]; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = s * .035; c.stroke(); }
@@ -834,6 +864,7 @@ function drawProfiles(c) {
       const f = profFrac(p);
       c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 1.5; c.strokeRect(x - 100.5, PROF.y + 68.5, 201, 9);
       c.fillStyle = f >= 1 ? SHARD : GOOD; c.fillRect(x - 100, PROF.y + 69, 200 * f, 8);
+      c.fillStyle = TEMPER; c.fillRect(x - 100, PROF.y + 81, 200 * tempFrac(p), 2); // and a hairline for how far its upgrades are tempered
       [['runs', 'wins', 'bosses'], ['kills', 'rooms', 'taken']].forEach((row, j) => row.forEach((k, n) => {
         const ix = x - 104 + n * 76, iy = PROF.y + 112 + j * 42;
         icon(c, MSTAT_ICON[k], ix, iy, 22, 'rgba(255,255,255,.8)', 1); num(c, p.stats[k] || 0, ix + 16, iy, '#fff');
@@ -918,6 +949,7 @@ function drawGallery(c) {
     c.globalAlpha = a;
     c.strokeStyle = ok ? rgba(col, .5) : 'rgba(255,255,255,.12)'; c.lineWidth = 1.5; c.strokeRect(x - 28, y - 28, 56, 56);
     drawUnlockIcon(c, u, x, y, 34, ok ? col : 'rgba(255,255,255,.16)');
+    if (ok && u.kind === 'up') drawLv(c, u.id, x, y, 44);
     if (!ok) {
       c.strokeStyle = '#fff'; c.lineWidth = 2.5;
       c.beginPath(); c.arc(x, y, 24, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, mGet(u.stat) / u.n)); c.stroke();
@@ -939,6 +971,11 @@ function drawGallery(c) {
   if (u) {
     const y = H - 56, ok = !u.stat || META.un[u.id], col = unlockCol(u);
     drawUnlockIcon(c, u, W / 2 - 110, y, 40, ok ? col : 'rgba(255,255,255,.35)');
+    // its levels, once tempering is within reach: a bar for each it can have, filled for each it has
+    if (ok && u.kind === 'up' && (maxAsc() > 0 || upLv(u.id))) for (let i = 0, n = upMax(u.id); i < n; i++) {
+      const bx = W / 2 - 152 - (n - 1 - i) * 9;
+      if (i < upLv(u.id)) { c.fillStyle = TEMPER; c.fillRect(bx, y - 9, 5, 18); } else { c.strokeStyle = rgba(TEMPER, .5); c.lineWidth = 1; c.strokeRect(bx + .5, y - 8.5, 4, 17); }
+    }
     if (u.stat) {
       icon(c, 'A9,5,1,5', W / 2 - 60, y, 22, '#fff', 1);
       icon(c, MSTAT_ICON[u.stat], W / 2 - 14, y, 34, '#fff', 1);
@@ -969,6 +1006,15 @@ function drawEnd(c, win) {
     }
     icon(c, 'P2,5,8,5,8,9,2,9;R3.6,5,2.2,180,360', W / 2 - n * 32 - 40, 500, 30, '#fff', 1);
   }
+  if (win && R.temper.length) { // what the stake won: each upgrade with the level it now has
+    const n = Math.min(R.temper.length, 16), y = G.newUn.length ? 566 : 500;
+    for (let i = 0; i < n; i++) {
+      const id = R.temper[i], x = W / 2 + (i - (n - 1) / 2) * 64;
+      c.strokeStyle = TEMPER; c.lineWidth = 2; c.strokeRect(x - 26, y - 26, 52, 52);
+      icon(c, UP[id].icon, x, y + Math.sin(G.t * 4 + i) * 2, 34, TIER_COL[UP[id].tier], 1); drawLv(c, id, x, y, 42);
+    }
+    LV_BARS.forEach(b => icon(c, b, W / 2 - n * 32 - 40, y, 30, TEMPER, 1.3));
+  }
   if (G.endT > 1.2 && Math.sin(G.t * 5) > -.3) keycap(c, W / 2, 620, 'SPACE', 70);
 }
 
@@ -982,6 +1028,7 @@ function drawPause(c) {
     const u = UP[id], x = W / 2 + ((i % 12) - 5.5) * 80, y = 230 + Math.floor(i / 12) * 80, col = TIER_COL[u.tier];
     c.strokeStyle = rgba(col, .6); c.lineWidth = 1.5; polyPath(c, x, y, 30, TIER_SIDES[u.tier], u.tier === 3 ? Math.PI / 2 : 0); c.stroke();
     icon(c, u.icon, x, y, u.tier === 3 ? 24 : 32, col, 1);
+    drawLv(c, id, x, y, 40);
     if (n > 1) num(c, '×' + n, x + 22, y + 26, col);
     i++;
   }

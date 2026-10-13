@@ -121,3 +121,76 @@ newRun(); R.nStages = 6; startStage(4);
 for (const u of UPS) giveUp(u.id);
 enterRoom(room('fight'), null); sim(20); enterRoom(room('boss'), null); sim(30);
 console.log('all-upgrades build ok; shots', R.shots.length, 'state', G.state, 'frames', frames);
+
+// 6. tempering
+{
+  const fail = (...m) => console.log('TEMPER FAIL:', ...m);
+  // every level of every upgrade does something, on its own and whatever the build; level 0 is the upgrade as written
+  let levels = 0;
+  for (const u of UPS) {
+    if (u.hidden) { if (upMax(u.id)) fail('hidden upgrade has levels', u.id); continue; }
+    if (!upMax(u.id)) fail('no levels', u.id);
+    for (const build of [[u.id], UPS.filter(q => !q.hidden).map(q => q.id)]) {
+      META.lv = {};
+      let prev = JSON.stringify(computeStats(SHIPS[0], build));
+      for (let L = 1; L <= upMax(u.id); L++) {
+        META.lv = { [u.id]: L };
+        const s = computeStats(SHIPS[0], build), now = JSON.stringify(s);
+        if (now === prev) fail('level is a no-op', u.id, L);
+        if (Object.keys(s).some(k => !isFinite(s[k]))) fail('bad stat', u.id, L, now);
+        prev = now; levels++;
+      }
+    }
+    META.lv = { [u.id]: 9 };
+    if (upLv(u.id) !== upMax(u.id)) fail('level not capped', u.id);
+  }
+  META.lv = {};
+  console.log('levels:', levels / 2, 'across', UPS.length - 1, 'upgrades');
+  // the rule itself: gains grow, costs shrink but stay costs
+  const st = (id, L) => { META.lv = L ? { [id]: L } : {}; const s = computeStats(SHIPS[0], [id]); META.lv = {}; return s; };
+  if (!(st('dmg', 3).dmg > st('dmg', 1).dmg && st('dmg', 1).dmg > st('dmg', 0).dmg)) fail('dmg does not grow');
+  if (!(st('heavy', 3).rate > st('heavy', 0).rate && st('heavy', 3).rate < baseStats().rate)) fail('heavy cost', st('heavy', 3).rate);
+  if (st('multi', 3).count !== 2 || st('drone', 3).drone !== 1 || st('glass', 3).maxHp !== 3) fail('a count was scaled');
+  if (st('slowshot', 3).spd !== st('slowshot', 0).spd || st('pact', 2).maxHp !== 2 || st('pact', 3).maxHp !== 3) fail('kept stats');
+  if (st('chaos', 3).inacc >= st('chaos', 0).inacc || st('small', 3).hitR >= st('small', 0).hitR) fail('lower-is-better stats');
+  // levels live in the profile, and only real ones survive an import
+  const p = parseProfile('{"stats":{"runs":1},"un":{},"lv":{"dmg":9,"scar":2,"nope":1,"tesla":"2","hp":-1,"rate":1.9}}');
+  if (JSON.stringify(p.lv) !== '{"dmg":3,"tesla":2,"rate":1}') fail('import', JSON.stringify(p.lv));
+  if (JSON.stringify(parseProfile(JSON.stringify({ game: 'dichotomy', v: 1, profile: packProfile(p) })).lv) !== JSON.stringify(p.lv)) fail('round trip');
+
+  // the antechamber: only before the last boss, only from the first ascension, and the only way in to it
+  unlockAll(); G.god = true; META.ship = 'tri';
+  for (const [asc, stage, want] of [[0, 5, false], [1, 4, false], [1, 5, true], [6, 5, true]]) {
+    META.asc = asc; newRun(); R.nStages = 6;
+    for (let i = 0; i < 150; i++) {
+      const f = genFloor(stage), a = f.rooms.find(r => r.type === 'ante'), b = f.rooms.find(r => r.type === 'boss');
+      if (!!a !== want) { fail('antechamber', asc, stage, !!a); break; }
+      if (!b) { fail('no boss'); break; }
+      if (a && (Object.keys(b.doors).length !== 1 || Object.values(b.doors)[0] !== a || Object.keys(a.doors).length !== 2 || a.peds.length !== 1)) { fail('antechamber not in the way'); break; }
+    }
+  }
+  // staking: random, never the same thing twice, never what cannot improve; a win pays out, a loss does not
+  const run = asc => { META.asc = asc; newRun(); R.nStages = 6; startStage(5); for (const id of ['dmg', 'drone', 'hp', 'pact', 'compass']) giveUp(id); R.P.ups.push('scar', 'drone'); recompute(); R.P.hp = R.P.stats.maxHp; enterRoom(room('ante'), null); R.P.x = W / 2; R.P.y = H / 2; IN.keys = {}; IN.mb = [false, false, false]; };
+  const lvs = () => Object.keys(META.lv).sort().map(k => k + META.lv[k]).join();
+  META.lv = { dmg: 1, hp: 2 };
+  run(1);
+  if (temperable().join() !== 'drone,pact,compass,drone') fail('what can be staked at ascension 1:', temperable().join());
+  sim(.2, false);
+  for (let i = 0; i < 6; i++) { IN.pressed.KeyE = true; sim(.1, false); }
+  if (R.temper.slice().sort().join() !== 'compass,drone,pact' || R.P.ups.slice().sort().join() !== 'dmg,drone,hp,scar') fail('stake', R.temper.join(), '/', R.P.ups.join());
+  if (R.P.hp > R.P.stats.maxHp || R.P.stats.maxHp !== 4) fail('health after staking', R.P.hp, R.P.stats.maxHp);
+  render(CTX); G.state = 'pause'; render(CTX); G.state = 'play';
+  endRun('dead'); render(CTX);
+  if (lvs() !== 'dmg1,hp2') fail('a lost run paid out', lvs());
+  run(3);
+  if (temperable().join() !== 'dmg,drone,pact,compass,drone') fail('what can be staked at ascension 3:', temperable().join());
+  for (let i = 0; i < 6; i++) sacrifice(R.room.peds[0]);
+  if (R.temper.length !== 4 || R.P.ups.slice().sort().join() !== 'drone,hp,scar') fail('stake at ascension 3', R.temper.join());
+  enterRoom(room('boss'), null); sim(1); render(CTX);
+  nextStage(); G.endT = 2; render(CTX);
+  if (G.state !== 'win' || lvs() !== 'compass1,dmg2,drone1,hp2,pact1') fail('a won run did not pay out', G.state, lvs());
+  if (JSON.parse(localStorage.getItem(slotKey(SLOT))).lv.dmg !== 2) fail('levels not saved');
+  for (const s of ['title', 'gallery', 'profiles']) { G.state = s; G.galSel = 0; frame(1 / 60); render(CTX); }
+  META.lv = {}; META.asc = 0; G.state = 'title';
+  console.log('tempering ok');
+}

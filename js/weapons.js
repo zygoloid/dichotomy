@@ -20,7 +20,7 @@ function spendCharge(n) { if (!R.P.preview) R.P.charge = Math.max(0, R.P.charge 
 function shotDmg() {
   const P = R.P, s = P.stats;
   let d = s.dmg;
-  if (s.kinetic) d *= 1 + s.kinetic * (hyp(P.vx, P.vy) > s.move * .5 ? .4 : -.2);
+  if (s.kinetic) d *= 1 + s.kinetic * (hyp(P.vx, P.vy) > s.move * s.kinThr ? .4 : -s.kinPen);
   if (s.berserk) d *= 1 + s.berserk * .2 * Math.max(0, s.maxHp - P.hp);
   d *= 1 + .06 * Math.min(P.chain, 8); // chain overdrive
   if (s.dynamo) d *= 1 + .8 * s.dynamo * chgFrac();
@@ -69,25 +69,25 @@ function fireVolley(ang) {
   const P = R.P, s = P.stats, cs = s.chargeshot ? P.cs : 0, d = shotDmg() * (1 + 3 * s.chargeshot * cs), rad = Math.PI / 180;
   P.cs = 0; if (P.fcN > 0) P.fcN--;
   let ox = P.x, oy = P.y, dm = 1; // origin and damage scale: the afterimage replays the pattern from elsewhere
-  const emit = a => {
+  const emit = (a, m) => {
     a += rand(-s.inacc, s.inacc) * rad;
     const pol = s.dichro && (P.dn++ & 1) ? P.pol ^ 1 : P.pol;
-    spawnShot(ox + Math.cos(a) * 12, oy + Math.sin(a) * 12, a, { dmg: d * dm, pol, size: 1 + cs });
+    spawnShot(ox + Math.cos(a) * 12, oy + Math.sin(a) * 12, a, { dmg: d * dm * (m || 1), pol, size: 1 + cs });
     if (dm === 1 && s.echo && chance(Math.min(.9, s.echo))) P.vq.push({ t: .12, a, one: true });
   };
   const n = s.count;
   const pattern = () => {
   if (s.ring) for (let i = 0; i < n; i++) emit(ang + i * TAU / n);
   else { const sp = Math.min(s.spread * rad, 2.9 / Math.max(1, n - 1)); for (let i = 0; i < n; i++) emit(ang + (i - (n - 1) / 2) * sp); }
-  for (let i = 0; i < s.back; i++) emit(ang + Math.PI + (i - (s.back - 1) / 2) * .16);
-  for (let i = 0; i < s.side; i++) { emit(ang + Math.PI / 2 + i * .16); emit(ang - Math.PI / 2 - i * .16); }
+  for (let i = 0; i < s.back; i++) emit(ang + Math.PI + (i - (s.back - 1) / 2) * .16, 1 + s.backDmg);
+  for (let i = 0; i < s.side; i++) { emit(ang + Math.PI / 2 + i * .16, 1 + s.sideDmg); emit(ang - Math.PI / 2 - i * .16, 1 + s.sideDmg); }
   };
   pattern();
   if (s.ghost && P.hist.length) { ox = P.hist[0].x; oy = P.hist[0].y; dm = .5 * s.ghost; pattern(); }
   if (s.rail && ++P.railN % 4 === 0) spawnShot(P.x, P.y, ang, { dmg: d * 3 * s.rail, pol: P.pol, size: 1.8, life: s.life * 1.6, rail: true });
   if (s.blade && P.bladeCd <= 0) slash(ang);
   if (s.recoil) { P.kx -= Math.cos(ang) * 130 * s.recoil; P.ky -= Math.sin(ang) * 130 * s.recoil; }
-  if (s.dynamo) spendCharge(1.5 * s.dynamo);
+  if (s.dynamo) spendCharge(s.dynDrain * s.dynamo);
   AU.sfx('shoot', P.pol);
 }
 
@@ -110,14 +110,14 @@ function updateFire(dt) {
     if (q.one) spawnShot(P.x, P.y, q.a, { dmg: shotDmg(), pol: P.pol }); else fireVolley(P.ang);
   }
   P.fireCd -= dt; P.bladeCd -= dt;
-  P.heat = clamp(P.heat + (P.firing ? dt / 2 : -dt * 2), 0, 1);
+  P.heat = clamp(P.heat + (P.firing ? dt / s.spinT : -dt * 2), 0, 1);
   P.shockCd -= dt; P.aimT -= dt;
   if (P.firing) P.fireHeld += dt;
   else {
     // aftershock: letting go after sustained fire throws out a ring
     if (s.aftershock && P.fireHeld > .6 && P.shockCd <= 0) {
       P.shockCd = .8;
-      for (let i = 0, n = 6 + 6 * s.aftershock; i < n; i++) spawnShot(P.x, P.y, P.ang + i * TAU / n, { dmg: shotDmg() * .8, pol: P.pol });
+      for (let i = 0, n = 6 + 6 * s.aftershock + s.shockN; i < n; i++) spawnShot(P.x, P.y, P.ang + i * TAU / n, { dmg: shotDmg() * .8, pol: P.pol });
       fxRing(P.x, P.y, .02, 400, .3);
     }
     P.fireHeld = 0;
@@ -126,11 +126,11 @@ function updateFire(dt) {
   if (P.rateBuff > 0) P.rateBuff -= dt;
   if (!P.firing || P.fireCd > 0) return;
   let rate = s.rate;
-  if (s.turret) rate *= 1 + s.turret * (P.still > .25 ? .5 : -.15);
+  if (s.turret) rate *= 1 + s.turret * (P.still > s.turStill ? .5 : -s.turPen);
   if (P.rateBuff > 0) rate *= 1.3;
   if (P.rageT > 0) rate *= 1 + .8 * s.rage;
   if (s.spinup) rate *= 1 + s.spinup * (-.4 + 1.7 * P.heat);
-  P.fireCd = (1 + .7 * s.volley) / Math.max(.3, rate);
+  P.fireCd = (1 + s.volleyGap * s.volley) / Math.max(.3, rate);
   fireVolley(P.ang);
   for (let i = 1; i <= s.volley; i++) P.vq.push({ t: i * .07 });
 }
@@ -145,12 +145,12 @@ function updateSecondary(dt) {
     const t = nearestEnemy(d.x, d.y, 520, null, noHurt(P.fus.twin ? P.pol ^ 1 : P.pol));
     if (t) d.ang = Math.atan2(t.y - d.y, t.x - d.x); else d.ang = P.face;
     if ((d.cd -= dt) <= 0 && t) {
-      d.cd = 2 / s.rate;
+      d.cd = 2 / (s.rate * (1 + s.droneRate));
       spawnShot(d.x, d.y, d.ang + rand(-s.inacc, s.inacc) * Math.PI / 180, { dmg: shotDmg() * .6, pol: P.fus.twin ? P.pol ^ 1 : P.pol });
     }
   }
   if (s.missile && (P.misCd -= dt) <= 0 && nearestEnemy(P.x, P.y, 2000)) {
-    P.misCd = 2.4;
+    P.misCd = s.misEvery;
     for (let i = 0; i < s.missile; i++)
       spawnShot(P.x, P.y, P.ang + Math.PI + rand(-.9, .9), { dmg: shotDmg() * 3, pol: P.pol, hom: 6, spd: 400, life: 3, size: 1.6, ex: 70, proj: true, burst: true });
   }
@@ -198,7 +198,7 @@ function updateSecondary(dt) {
     for (let i = 0; i < 1 + s.tesla + s.chain; i++) {
       const t = nearestEnemy(fx, fy, i ? 230 : 260, seen, noHurt(P.pol));
       if (!t) break;
-      if (!i) P.teslaCd = .9;
+      if (!i) P.teslaCd = s.teslaEvery;
       seen.add(t); R.arcs.push({ x0: fx, y0: fy, x1: t.x, y1: t.y, t: 0, pol: P.pol });
       damageEnemy(t, d * (t.pol !== P.pol ? s.oppMul : s.sameMul)); d *= .7; fx = t.x; fy = t.y;
     }
@@ -263,14 +263,14 @@ function hitEnemy(sh, e) {
   let d = sh.dmg;
   if (s.grow) d *= .7 + s.grow * 1.5 * f;
   if (s.pblank) d *= Math.max(.3, 1 + s.pblank * (.9 - 1.5 * f));
-  if (s.accel) d *= Math.pow(.6 + 1.2 * f, s.accel);
+  if (s.accel) d *= Math.pow(s.accelFloor + 1.2 * f, s.accel);
   if (sh.ret) d *= 1 + .4 * s.boom;
   const crit = chance(s.crit);
   if (crit) d *= s.critMul;
   const base = d, m = polMul(sh.pol, e);
   if (m <= 0) {
     // wrong colour: the shot glances off and none of its effects apply
-    if (s.slip) { (sh.hit || (sh.hit = new Set())).add(e); return; } // slips straight through instead
+    if (s.slip) { (sh.hit || (sh.hit = new Set())).add(e); sh.dmg *= 1 + s.slipDmg; return; } // slips straight through instead
     e.df = .14; fxParts(sh.x, sh.y, PAL.pc[e.pol], 2, 120); AU.sfx('tink');
     if (sh.pierce > 0) { sh.pierce--; (sh.hit || (sh.hit = new Set())).add(e); } else killShot(sh);
     return;
@@ -290,13 +290,13 @@ function hitEnemy(sh, e) {
       const t = nearestEnemy(from.x, from.y, 230, seen);
       if (!t) break;
       seen.add(t); R.arcs.push({ x0: from.x, y0: from.y, x1: t.x, y1: t.y, t: 0, pol: sh.pol });
-      damageEnemy(t, base * .5 * polMul(sh.pol, t)); from = t;
+      damageEnemy(t, base * s.chainDmg * polMul(sh.pol, t)); from = t;
     }
   }
   if (sh.split > 0) for (const k of [-.5, .5])
     spawnShot(sh.x, sh.y, sh.ang + k, { dmg: sh.dmg * .55, pol: sh.pol, split: sh.split - 1, skip: e, size: .8, proj: !sh.beam });
   if (s.refract) { // carries on in the other colour, so it can only hurt each enemy once
-    sh.pol ^= 1; (sh.hit || (sh.hit = new Set())).add(e); sh.dmg *= .85 * (1 + s.pierceGrow);
+    sh.pol ^= 1; (sh.hit || (sh.hit = new Set())).add(e); sh.dmg *= s.refractK * (1 + s.pierceGrow);
   } else if (sh.pierce > 0) { sh.pierce--; (sh.hit || (sh.hit = new Set())).add(e); sh.dmg *= 1 + s.pierceGrow; }
   else killShot(sh);
 }
@@ -304,7 +304,7 @@ function hitEnemy(sh, e) {
 function killShot(sh) {
   if (sh.dead) return;
   sh.dead = true;
-  for (let i = 0; i < sh.frag * 3; i++)
+  for (let i = 0, n = sh.frag > 0 ? sh.frag * 3 + R.P.stats.fragN : 0; i < n; i++)
     spawnShot(sh.x, sh.y, rand(TAU), { dmg: sh.dmg * .35, pol: sh.pol, split: 0, frag: 0, size: .7, life: .35, proj: !sh.beam, kid: true });
 }
 
@@ -341,6 +341,8 @@ function stepShot(sh, dt, scan) {
   if ((nx || ny) && R.room.hidden) hitSecret(sh);
   if (!nx && !ny && !s.phase) for (const o of R.room.obs) { const h = circRect(sh.x, sh.y, sh.r, o); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; if (o.burst && sh.burst) breakBlock(o); break; } }
   if (!nx && !ny && !s.phase) for (const g of R.room.gates) if (g.pol !== sh.pol) { const h = circRect(sh.x, sh.y, sh.r, g); if (h) { nx = h.nx; ny = h.ny; sh.x += h.x; sh.y += h.y; break; } }
+  // a tempered phase round hits harder once it has been through something solid
+  if (s.phaseDmg && !sh.ph && (R.room.obs.some(o => circRect(sh.x, sh.y, sh.r, o)) || R.room.gates.some(g => g.pol !== sh.pol && circRect(sh.x, sh.y, sh.r, g)))) { sh.ph = true; sh.dmg *= 1 + s.phaseDmg; }
   if (nx || ny) {
     if (sh.bounce <= 0) { killShot(sh); return; }
     sh.bounce--;
@@ -411,10 +413,10 @@ function updateShots(dt) {
 
   // orbitals: block any bullet, grind anything they touch
   if (s.orbit) {
-    const dps = s.dmg * s.rate * .35;
+    const dps = s.dmg * s.rate * .35 * (1 + s.orbitDmg);
     for (let i = 0; i < s.orbit; i++) {
       const a = R.time * 2.6 + i * TAU / s.orbit, ox = P.x + Math.cos(a) * 48, oy = P.y + Math.sin(a) * 48;
-      for (const b of R.bullets) if (!b.dead && hyp(b.x - ox, b.y - oy) < b.r + 9) { b.dead = true; fxParts(b.x, b.y, PAL.pc[b.pol], 2, 90); }
+      for (const b of R.bullets) if (!b.dead && hyp(b.x - ox, b.y - oy) < b.r + 9 + s.orbitR) { b.dead = true; fxParts(b.x, b.y, PAL.pc[b.pol], 2, 90); }
       for (const e of R.enemies) if (!e.dead && e.spawn <= 0 && hyp(e.x - ox, e.y - oy) < e.r + 9) damageEnemy(e, dps * dt * (e.pol !== P.pol ? s.oppMul : s.sameMul));
     }
   }

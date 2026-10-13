@@ -330,6 +330,9 @@ function genFloor(stage) {
     while (q.length) { const r = q.shift(); for (const d in r.doors) { const o = r.doors[d]; if (o.depth < 0) { o.depth = r.depth + 1; q.push(o); } } }
   };
   link(); bfs();
+  // From the first ascension up, a run's last boss is reached through the antechamber, where
+  // upgrades can be staked on the fight (see sacrifice in game.js).
+  const ante = stage === R.nStages - 1 && R.asc >= 1;
   // special rooms are always dead ends hanging off a normal room
   // order matters on small floors: dead-end slots can run out, so the essentials go first
   const specials = ['boss', 'treasure', 'secret'];
@@ -346,7 +349,21 @@ function genFloor(stage) {
     }
     if (!c.length) continue;
     let ch = pick(c);
-    if (type === 'boss') { const md = Math.max(...c.map(q => q.from.depth)); ch = pick(c.filter(q => q.from.depth === md)); }
+    if (type === 'boss') {
+      const deepest = l => { const md = Math.max(...l.map(q => q.from.depth)); return pick(l.filter(q => q.from.depth === md)); };
+      ch = deepest(c);
+      // the antechamber takes the boss's dead end, and the boss hangs off it in turn; if nowhere
+      // has room for both, look one cell beyond the usual edge of the floor
+      for (const pad of ante ? [0, 1] : []) {
+        const beyond = q => dirs.map(d => [q.x + d[0], q.y + d[1]]).filter(([x, y]) => !map[key(x, y)] && Math.abs(x) <= 5 + pad && Math.abs(y) <= 4 + pad && nb(x, y) === 0);
+        const l = c.filter(q => beyond(q).length);
+        if (!l.length) continue;
+        ch = deepest(l);
+        const [x, y] = pick(beyond(ch));
+        add(ch.x, ch.y, 'ante'); ch = { x, y };
+        break;
+      }
+    }
     add(ch.x, ch.y, type);
   }
   link(); bfs();
@@ -384,6 +401,8 @@ function genFloor(stage) {
       else if (kind === 'bargain') rollUps(3, 4).forEach((u, i) => ped(W / 2 + (i - 1) * 170, u, { price: 6 + stage * 2 }));
       else if (kind === 'cursed') { rollUps(2, 0, u => u.tier === 3).forEach((u, i) => ped(W / 2 + (i ? 100 : -100), u)); loot('heart', 1); }
       else rollUps(2, 8).forEach((u, i) => ped(W / 2 + (i ? 100 : -100), u));
+    } else if (r.type === 'ante') {
+      r.peds.push({ x: W / 2, y: H / 2, temper: true, price: 0, taken: false });
     } else if (r.type === 'altar') {
       rollUps(2, 6, u => u.tier >= 1).forEach((u, i) => r.peds.push({ x: W / 2 + (i ? 110 : -110), y: H / 2, up: u, price: 0, hpCost: 1, taken: false }));
     } else if (r.type === 'start' && META.un.startped && stage === 0) {

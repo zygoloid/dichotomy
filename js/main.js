@@ -30,6 +30,7 @@
         if (k > 1) for (const id of ['stage4', 'stage5', 'asc1', 'asc2'].concat(k > 2 ? [] : ['ship:' + ship])) p.un[id] = true;
         p.stats = { stage: [0, 1, 5, 6][k], runs: [0, 5, 61, 240][k], bosses: [0, 0, 19, 150][k], wins: [0, 0, 2, 31][k], kills: [0, 96, 4870, 30512][k], rooms: [0, 14, 410, 2204][k], taken: [0, 9, 388, 1987][k] };
         p.ship = ship;
+        if (k > 1) UPS.forEach((u, i) => { const v = Math.min(upMax(u.id), k > 2 ? (i % 5 ? 3 : 2) : i % 4 ? 0 : 1); if (v) p.lv[u.id] = v; });
         return p;
       };
       const k = +(/sample(\d)/.exec(hash) || [0, 2])[1];
@@ -42,7 +43,10 @@
     else if (hash.includes('gallery')) { G.state = 'gallery'; G.galSel = +((/sel(d+)/.exec(hash) || [])[1] || 0); }
     else if (!hash.includes('title')) {
       if (hash.includes('unlockall')) for (const u of UNLOCKS) META.un[u.id] = true;
+      const lv = /lv(\d)/.exec(hash), av = /asc(\d)/.exec(hash), sac = /sac(\d+)/.exec(hash);
+      if (lv) { G.noSave = true; for (const u of UPS) if (Math.min(+lv[1], upMax(u.id))) META.lv[u.id] = Math.min(+lv[1], upMax(u.id)); }
       newRun();
+      if (av) R.asc = +av[1];
       const m = /stage(\d)/.exec(hash), ups = /ups(\d+)/.exec(hash);
       const th = /theme(\d)/.exec(hash);
       if (th) { R.nStages = 6; R.route[STAGES[+th[1]].depth] = +th[1]; startStage(STAGES[+th[1]].depth); }
@@ -58,6 +62,8 @@
         for (let i = 0; lay && i < 60 && !R.floor.rooms.some(r => r.layout === lay); i++) startStage(R.stage);
         enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length) && (!hash.includes('current') || r.flow) && (!/layout=/.test(hash) || r.layout === /layout=([a-z]+)/.exec(hash)[1]) && (!hash.includes('holes') || r.holes.length) && (!hash.includes('gatemaze') || r.gates.length) && (!hash.includes('wraps') || r.wraps.length)) || R.floor.start, null);
       }
+      for (let i = 0; sac && i < +sac[1]; i++) sacrifice(R.room.peds[0] || R.P);
+      if (hash.includes('won')) { R.stage = R.nStages - 1; nextStage(); G.endT = 2; }
       G.god = true;
       if (hash.includes('atwall')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.wraps = [{ l0: 120, r0: 460, h: 140 }]; }
       if (hash.includes('athole')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.holes = [{ x: 420, y: 330, r: 56, to: 1 }, { x: 860, y: 420, r: 56, to: 0 }]; }

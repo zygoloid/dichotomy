@@ -16,7 +16,11 @@ function baseStats() {
     // pilot
     maxHp: 4, move: 300, hitR: 5, absorbR: 26, magnet: 90, luck: 0, chargeMax: 100, rings: 1, gain: 1, burstN: 1,
     burstDmg: 1, nova: 0, flipLock: 0, reflect: 0, graze: 0, flipSlow: 0, thorns: 0, shield: 0, vamp: 0,
-    greed: 0, inv: 1.1, bulletSpd: 1
+    greed: 0, inv: 1.1, bulletSpd: 1,
+    // set only by an upgrade's tempered levels (see LEVELS)
+    backDmg: 0, sideDmg: 0, orbitDmg: 0, orbitR: 0, droneRate: 0, misEvery: 2.4, teslaEvery: 0.9, chainDmg: 0.5, volleyGap: 0.7,
+    hpHeal: 0, hearts: 0, novaN: 0, thornsN: 0, shockN: 0, fragN: 0, swarmN: 0, fcritN: 0, slipDmg: 0, phaseDmg: 0, refractK: 0.85,
+    kinPen: 0.2, kinThr: 0.5, turPen: 0.15, turStill: 0.25, spinT: 2, dynDrain: 1.5, accelFloor: 0.6
   };
 }
 
@@ -37,7 +41,8 @@ function baseStats() {
 //   flame / snowflake       burn / chill          concentric arcs round a dot   gravity
 //   clock or hourglass      time or fire rhythm
 //   crosshair               aiming (never damage)
-// Outside upgrades: a square is an enemy, a crossed square a kill, a bare X is "no", a tick "yes".
+// Outside upgrades: a square is an enemy, a crossed square a kill, a bare X is "no", a tick "yes";
+// rising bars are tempering, and a small bar at an icon's corner is one level of it.
 // tier 0 = plain good, 1 = good with a cost, 2 = situational / synergy, 3 = cursed
 const TIER_COL = ['#7dffb0', '#ffd84a', '#b98cff', '#ff5468'];
 const TIER_SIDES = [0, 4, 6, 3];
@@ -191,11 +196,99 @@ function fusionsOf(ups, extra) {
   return f;
 }
 
+// ---- tempering
+// An upgrade sacrificed before a run's last boss gains a level for good if the run is then won
+// (see sacrifice in game.js). A level belongs to the upgrade, not to a copy of it, and is kept in
+// the profile (META.lv).
+//
+// Most upgrades improve by one rule, worked out from what their fn does to each stat: every level
+// adds 15% to a change for the better and takes a sixth off a change for the worse, so a cost is
+// halved at level 3 and never gone. Multipliers are scaled in the exponent.
+// Stats the rule never touches: whole numbers that count things (a fractional drone is a whole
+// extra drone), on/off switches, and shapes of flight that are neither better nor worse.
+const NOSCALE = new Set(['count', 'spread', 'pierce', 'bounce', 'split', 'frag', 'chain', 'back', 'side', 'orbit', 'drone', 'missile', 'tesla',
+  'rings', 'shield', 'maxHp', 'volley', 'ring', 'beam', 'crescent', 'phase', 'refract', 'slip', 'dichro', 'map', 'nova', 'thorns', 'aftershock',
+  'swarm', 'fcrit', 'wave', 'curve', 'tether', 'accel', 'kinetic', 'turret', 'spinup', 'dynamo']);
+const LOWER = new Set(['inacc', 'hitR', 'flipLock', 'recoil', 'bulletSpd']); // stats where less is better
+// Where the rule is not enough, an upgrade has an entry here:
+//   max        how many levels it has (3 unless given)
+//   keep       stats of its own that the rule must leave alone because they are what the upgrade is; '*' = all of them
+//   fn(s, L)   what its level adds, on top of the rule
+//   gl(L)      the level the rule sees
+const upTo = (s, k, v) => { s[k] = Math.max(s[k], v); }, downTo = (s, k, v) => { s[k] = Math.min(s[k], v); };
+const LEVELS = {
+  scar: { max: 0 },
+  // counts with nothing else to improve: each gets a number of its own
+  pierce: { keep: '*', fn: (s, L) => { s.pierceGrow += .1 * L; } },
+  bounce: { keep: '*', fn: (s, L) => { s.ricoGrow += .1 * L; } },
+  back: { max: 2, fn: (s, L) => { s.backDmg += .2 * L; } },
+  side: { max: 2, fn: (s, L) => { s.sideDmg += .2 * L; } },
+  orbit: { fn: (s, L) => { s.orbitDmg += .2 * L; if (L >= 3) s.orbitR += 4; } },
+  drone: { fn: (s, L) => { s.droneRate += .2 * L; } },
+  missile: { fn: (s, L) => downTo(s, 'misEvery', [2, 1.7, 1.4][L - 1]) },
+  tesla: { max: 2, fn: (s, L) => downTo(s, 'teslaEvery', [.75, .6][L - 1]) },
+  chain: { max: 2, keep: '*', fn: (s, L) => upTo(s, 'chainDmg', .5 + .1 * L) },
+  volley: { fn: (s, L) => downTo(s, 'volleyGap', .7 - .1 * L) },
+  tank: { max: 2, fn: (s, L) => { s.chargeMax *= 1 + .15 * L; } },
+  shield: { max: 2, fn: (s, L) => { s.inv += .15 * L; } },
+  hp: { max: 2, fn: (s, L) => { s.hpHeal = 1; if (L >= 2) s.hearts += .1; } }, // taking it heals fully; then hearts drop more often
+  nova: { max: 2, fn: (s, L) => { s.novaN += 2 * L; } },
+  thorns: { max: 2, keep: '*', fn: (s, L) => { s.thornsN += 4 * L; } },
+  aftershock: { max: 2, fn: (s, L) => { s.shockN += 2 * L; } },
+  frag: { max: 2, keep: '*', fn: (s, L) => { s.fragN += L; } },
+  swarm: { max: 2, fn: (s, L) => { s.swarmN += L; } },
+  fcrit: { max: 2, fn: (s, L) => { s.fcritN += L; } },
+  // switches: something extra for the shots that use them
+  slip: { fn: (s, L) => { s.slipDmg += .1 * L; } },
+  phase: { fn: (s, L) => { s.phaseDmg += .15 * L; } },
+  refract: { max: 2, keep: '*', fn: (s, L) => upTo(s, 'refractK', .85 + .05 * L) },
+  compass: { max: 2, keep: '*', fn: (s, L) => { s.map += L; } },
+  // one stat is both the bonus and the penalty: only the penalty eases
+  kinetic: { fn: (s, L) => { downTo(s, 'kinPen', L > 1 ? 0 : .1); if (L >= 3) downTo(s, 'kinThr', .4); } },
+  turret: { fn: (s, L) => { downTo(s, 'turPen', L > 1 ? 0 : .08); if (L >= 3) downTo(s, 'turStill', .15); } },
+  spinup: { max: 2, fn: (s, L) => downTo(s, 'spinT', [1.6, 1.3][L - 1]) },
+  dynamo: { max: 2, fn: (s, L) => downTo(s, 'dynDrain', [1.25, 1][L - 1]) },
+  anchor: { max: 2, fn: (s, L) => upTo(s, 'accelFloor', .6 + .1 * L) },
+  // what these do to a shot is the point of them, not a price
+  slowshot: { keep: ['spd', 'life'] }, tiny: { keep: ['size'] }, flame: { keep: ['life', 'spd', 'inacc', 'size'] },
+  pact: { gl: L => Math.min(L, 2), fn: (s, L) => { if (L >= 3) s.maxHp += 1; } } // the last level gives a heart back
+};
+const upMax = id => { const t = LEVELS[id]; return t && t.max !== undefined ? t.max : 3; };
+const upLv = id => Math.min((typeof META !== 'undefined' && META.lv && META.lv[id]) || 0, upMax(id));
+const lvCap = asc => asc >= 6 ? 3 : asc >= 3 ? 2 : asc >= 1 ? 1 : 0; // the highest level a run at this ascension can earn
+// what an upgrade's fn does, stat by stat: [stat, multiplies?, by how much, for the better?]
+function upFx(u) {
+  if (u.fx) return u.fx;
+  const a = baseStats(), b = baseStats();
+  for (const k in a) { a[k] = 10; b[k] = 20; }
+  u.fn(a); u.fn(b);
+  u.fx = [];
+  for (const k in a) {
+    const da = a[k] - 10, db = b[k] - 20;
+    if (!da && !db) continue;
+    const mul = Math.abs(da - db) > 1e-9, v = mul ? a[k] / 10 : da;
+    u.fx.push([k, mul, v, (mul ? v > 1 : v > 0) !== LOWER.has(k)]);
+  }
+  return u.fx;
+}
+function applyUp(s, id) {
+  const u = UP[id], L = upLv(id);
+  u.fn(s);
+  if (!L) return;
+  const t = LEVELS[id] || {}, g = t.gl ? t.gl(L) : L;
+  if (t.keep !== '*') for (const [k, mul, v, good] of upFx(u)) {
+    if (NOSCALE.has(k) || (t.keep && t.keep.includes(k))) continue;
+    const f = good ? .15 * g : -g / 6; // how much more of the change there is, as a share of it
+    if (mul) s[k] *= Math.pow(v, f); else s[k] += v * f;
+  }
+  if (t.fn) t.fn(s, L);
+}
+
 function computeStats(ship, ups, extra) {
   const s = baseStats();
   ship.fn(s);
-  for (const id of ups) UP[id].fn(s);
-  if (extra) UP[extra].fn(s);
+  for (const id of ups) applyUp(s, id);
+  if (extra) applyUp(s, extra);
   s.maxHp = Math.max(1, Math.round(s.maxHp));
   // soft limits rather than hard clamps, so an upgrade to a stat at its limit still does something
   s.rate = Math.max(0.5, s.rate > 20 ? 20 * Math.sqrt(s.rate / 20) : s.rate);

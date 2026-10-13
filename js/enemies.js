@@ -533,7 +533,7 @@ function damageEnemy(e, d, crit) {
 
 function swarmDarts(e) {
   const P = R.P;
-  for (let i = 0; i < 3 * P.stats.swarm; i++)
+  for (let i = 0; i < 3 * P.stats.swarm + P.stats.swarmN; i++)
     spawnShot(e.x, e.y, rand(TAU), { dmg: shotDmg() * .5, pol: P.pol, hom: 6, spd: 420, life: 1.4, size: .8, split: 0, frag: 0, proj: true, kid: true });
 }
 
