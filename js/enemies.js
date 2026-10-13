@@ -184,7 +184,7 @@ E('charger', {
       if (e.cd <= 0) { e.st = 2; e.cd = .5; e.warn = null; }
     } else {
       e.vx = Math.cos(e.rot) * 640; e.vy = Math.sin(e.rot) * 640;
-      const wall = e.x <= BX0 + e.r + 2 || e.x >= BX1 - e.r - 2 || e.y <= BY0 + e.r + 2 || e.y >= BY1 - e.r - 2;
+      const wall = (e.vx < 0 && e.x <= BX0 + e.r + 2) || (e.vx > 0 && e.x >= BX1 - e.r - 2) || (e.vy < 0 && e.y <= BY0 + e.r + 2) || (e.vy > 0 && e.y >= BY1 - e.r - 2); // one it is flying into
       if (e.cd <= 0 || wall) { e.st = 0; e.cd = rand(1, 1.8); e.vx = e.vy = 0; ering(e, 8, 160, rand(TAU)); }
     }
   }
@@ -308,7 +308,8 @@ E('lancer', {
     } else {
       e.vx = Math.cos(e.rot) * 720; e.vy = Math.sin(e.rot) * 720;
       if ((e.q -= dt) <= 0) { e.q = .045; eb(e.x, e.y, e.rot + Math.PI / 2, 35, e.pol); eb(e.x, e.y, e.rot - Math.PI / 2, 35, e.pol); }
-      const wall = e.x <= BX0 + e.r + 2 || e.x >= BX1 - e.r - 2 || e.y <= BY0 + e.r + 2 || e.y >= BY1 - e.r - 2;
+      // only a wall it is flying into stops it: each dash starts from the wall the last one ended on
+      const wall = (e.vx < 0 && e.x <= BX0 + e.r + 2) || (e.vx > 0 && e.x >= BX1 - e.r - 2) || (e.vy < 0 && e.y <= BY0 + e.r + 2) || (e.vy > 0 && e.y >= BY1 - e.r - 2);
       if (e.cd <= 0 || wall) { e.st = 0; e.cd = e.hp < e.maxHp * .5 ? .6 : .95; e.vx = e.vy = 0; ering(e, 16, 170, rand(TAU)); e.pol ^= 1; fxShake(6); }
     }
   }
