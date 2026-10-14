@@ -63,6 +63,7 @@
         enterRoom(R.floor.rooms.find(r => r.type === want && (want !== 'fight' || !hash.includes('gates') || r.gates.length) && (!hash.includes('current') || r.flow) && (!/layout=/.test(hash) || r.layout === /layout=([a-z]+)/.exec(hash)[1]) && (!hash.includes('holes') || r.holes.length) && (!hash.includes('gatemaze') || r.gates.length) && (!hash.includes('wraps') || r.wraps.length)) || R.floor.start, null);
       }
       for (let i = 0; sac && i < +sac[1]; i++) sacrifice(R.room.peds[0] || R.P);
+      if (hash.includes('slain')) { for (let i = 0; i < 40 && !R.room.cleared; i++) { for (const e of R.enemies.slice()) damageEnemy(e, 1e9); for (let k = 0; k < 30; k++) { frame(1 / 60); IN.end(); } } R.P.x = W / 2 + 200; for (let k = 0; k < 240; k++) { frame(1 / 60); IN.end(); } }
       if (hash.includes('won')) { R.stage = R.nStages - 1; nextStage(); G.endT = 2; }
       G.god = true;
       if (hash.includes('atwall')) { R.room.obs = []; R.room.gates = []; R.room.navB = null; R.room.wraps = [{ l0: 120, r0: 460, h: 140 }]; }

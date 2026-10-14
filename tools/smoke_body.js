@@ -186,8 +186,11 @@ console.log('all-upgrades build ok; shots', R.shots.length, 'state', G.state, 'f
   if (temperable().join() !== 'dmg,drone,pact,compass,drone') fail('what can be staked at ascension 3:', temperable().join());
   for (let i = 0; i < 6; i++) sacrifice(R.room.peds[0]);
   if (R.temper.length !== 4 || R.P.ups.slice().sort().join() !== 'drone,hp,scar') fail('stake at ascension 3', R.temper.join());
-  enterRoom(room('boss'), null); sim(1); render(CTX);
-  nextStage(); G.endT = 2; render(CTX);
+  enterRoom(room('boss'), null); for (let i = 0; i < 40 && !R.room.cleared; i++) { for (const e of R.enemies.slice()) damageEnemy(e, 1e9); sim(.5, false); } sim(1, false); render(CTX);
+  if (!R.room.cleared || R.room.peds.length || !R.room.portal.crown || R.pickups.some(p => p.kind === 'heart')) fail('last boss room', R.room.cleared, R.room.peds.length);
+  R.P.x = W / 2; R.P.y = BY0 + 2; sim(.5, false); if (R.room.type !== 'boss') fail('left the last boss room');
+  R.P.x = W / 2; R.P.y = H / 2; sim(.1, false);
+  if (G.state !== 'win') nextStage(); G.endT = 2; render(CTX);
   if (G.state !== 'win' || lvs() !== 'compass1,dmg2,drone1,hp2,pact1') fail('a won run did not pay out', G.state, lvs());
   if (JSON.parse(localStorage.getItem(slotKey(SLOT))).lv.dmg !== 2) fail('levels not saved');
   for (const s of ['title', 'gallery', 'profiles']) { G.state = s; G.galSel = 0; frame(1 / 60); render(CTX); }

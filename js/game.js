@@ -242,7 +242,12 @@ function clearRoom() {
   if (!P.hit) mAdd('nohit');
   P.sh = s.shield;
   AU.sfx('clear'); fxRing(W / 2, H / 2, .03, 900, .7);
-  if (room.type === 'boss') {
+  if (room.type === 'boss' && R.stage + 1 >= R.nStages) {
+    // the last boss: nothing more to take and nowhere else to go (in particular, not back to the
+    // antechamber to stake more on a fight already won), only the crown that ends the run
+    room.sealed = true;
+    room.portal = { x: W / 2, y: H / 2, crown: true };
+  } else if (room.type === 'boss') {
     const ups = rollUps(3, s.luck + 3);
     ups.forEach((u, i) => room.peds.push({ x: W / 2 + (i - 1) * 170, y: H / 2 + 90, up: u, price: 0, group: 2, taken: false }));
     room.portal = { x: W / 2, y: 190 };
@@ -398,7 +403,7 @@ function updatePlayer(dt) {
   for (const o of room.obs) { const h = circRect(P.x, P.y, 12, o); if (h) { P.x += h.x; P.y += h.y; if (o.hot && !(P.doorT > 0)) hurtPlayer(); } }
   for (const g of room.gates) if (g.pol !== P.pol) { const h = circRect(P.x, P.y, 12, g); if (h) { P.x += h.x; P.y += h.y; } }
   // walls, with gaps where doors are open
-  const pr = 12, open = room.cleared, D = room.doors;
+  const pr = 12, open = room.cleared && !room.sealed, D = room.doors;
   const gy = Math.abs(P.y - H / 2) < 32, gx = Math.abs(P.x - W / 2) < 32;
   // a linked stretch of wall is open to walk through
   if (P.x < BX0 + pr && !inWrap(P.y, -1) && !(open && D.w && gy)) P.x = BX0 + pr;

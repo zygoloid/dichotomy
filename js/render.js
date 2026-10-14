@@ -102,7 +102,7 @@ function drawBG(c, beat) {
 
 // ---------------------------------------------------------------- world
 function drawRoomFrame(c) {
-  const room = R.room, open = room.cleared;
+  const room = R.room, open = room.cleared && !room.sealed;
   c.fillStyle = 'rgba(0,0,0,.6)';
   c.fillRect(0, 0, W, BY0); c.fillRect(0, BY1, W, H - BY1); drawMargin(c, room, -1); drawMargin(c, room, 1);
   c.strokeStyle = PAL.wall; c.lineWidth = 3;
@@ -496,7 +496,10 @@ function drawWorld(c) {
   drawFurniture(c);
   if (room.portal) {
     const q = room.portal;
-    for (let i = 0; i < 5; i++) {
+    if (q.crown) { // the way out of the last boss's room: a crown, as on the win screen
+      c.strokeStyle = rgba(SHARD, .35 + .2 * Math.sin(G.t * 3)); c.lineWidth = 2; c.beginPath(); c.arc(q.x, q.y, 40 + 3 * Math.sin(G.t * 3), 0, TAU); c.stroke();
+      icon(c, MSTAT_ICON.wins, q.x, q.y + Math.sin(G.t * 2) * 3, 52, SHARD, 1);
+    } else for (let i = 0; i < 5; i++) {
       c.strokeStyle = i % 2 ? PAL.pc[0] : PAL.pc[1]; c.lineWidth = 2.5;
       polyPath(c, q.x, q.y, 10 + i * 8, 3 + i, G.t * (2.5 - i * .4) * (i % 2 ? 1 : -1)); c.stroke();
     }
@@ -1072,7 +1075,7 @@ function render(c) {
     for (const w of R.wells) src.push([1, w.x, w.y, w.vis || w.r * .22, .00016 * w.str]);
     for (const o of R.orbs) src.push([1, o.x, o.y, 55, .03]);
     if (R.P.stats.repel) src.push([1, R.P.x, R.P.y, 70, -.006 * R.P.stats.repel]); // space bulges outward around the ship
-    if (R.room.portal) src.push([1, R.room.portal.x, R.room.portal.y, 46, .02]);
+    if (R.room.portal && !R.room.portal.crown) src.push([1, R.room.portal.x, R.room.portal.y, 46, .02]);
     for (const f of R.fx) src.push([2, f.x, f.y, f.t * f.spd, f.str * (1 - f.t / f.life)]);
     if (R.P.stats.grav) for (let i = 0; i < R.shots.length && src.length < 12; i += 4) src.push([1, R.shots[i].x, R.shots[i].y, 18, .0015 * Math.min(3, R.P.stats.grav)]);
     ca += R.ca + (R.slowT > 0 ? .008 : 0);
